@@ -62,3 +62,8 @@ test -f tools/start.sh
 test -f tools/rj45_bridge_watch.sh
 grep -q 'tools/start.sh' .github/workflows/build.yml
 grep -q 'tools/rj45_bridge_watch.sh' .github/workflows/build.yml
+
+# 覆盖安装必须能停掉旧进程并启动新二进制：
+# install.sh 需在 SIGTERM 超时后升级 SIGKILL；start.sh 需识别被替换后残留的旧进程
+grep -q 'kill -9' tools/update_install.sh
+grep -q '(deleted)' tools/start.sh

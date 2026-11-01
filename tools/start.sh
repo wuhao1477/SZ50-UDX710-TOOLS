@@ -19,11 +19,30 @@ if ! command -v start-stop-daemon >/dev/null 2>&1; then
 fi
 
 cd "$BASE_DIR"
+
+# pid 文件里的进程是否就是"当前这个" server 二进制。
+# 覆盖安装后旧进程的 /proc/<pid>/exe 会变成 "<path> (deleted)"，
+# 这种残留进程必须清掉，否则会误判为"已在运行"而跳过启动新版本。
+server_pid_matches_binary() {
+    pid=$1
+    exe=$(readlink "/proc/$pid/exe" 2>/dev/null || true)
+    [ "$exe" = "$SERVER" ]
+}
+
 server_running=0
 if [ -r "$SERVER_PID" ]; then
     pid=$(cat "$SERVER_PID" 2>/dev/null || true)
     if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-        server_running=1
+        if server_pid_matches_binary "$pid"; then
+            server_running=1
+        else
+            exe=$(readlink "/proc/$pid/exe" 2>/dev/null || echo unknown)
+            echo "清理残留 server 进程 $pid (exe=$exe)" >&2
+            kill "$pid" 2>/dev/null || true
+            sleep 1
+            kill -9 "$pid" 2>/dev/null || true
+            rm -f "$SERVER_PID"
+        fi
     fi
 fi
 if [ "$server_running" -eq 0 ]; then

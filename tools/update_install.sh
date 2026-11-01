@@ -14,6 +14,7 @@ stop_pid_file() {
     fi
     pid=$(cat "$pid_file" 2>/dev/null || true)
     if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+        rm -f "$pid_file"
         return 0
     fi
     kill "$pid" 2>/dev/null || true
@@ -22,6 +23,23 @@ stop_pid_file() {
         sleep 1
         attempt=$((attempt + 1))
     done
+    # server 的优雅退出可能阻塞在收尾线程上，SIGTERM 超时后必须升级为 SIGKILL，
+    # 否则 start.sh 会因为 pid 文件仍指向存活进程而跳过启动新二进制。
+    if kill -0 "$pid" 2>/dev/null; then
+        echo "进程 $pid 未在 10s 内响应 SIGTERM，改用 SIGKILL" >&2
+        kill -9 "$pid" 2>/dev/null || true
+        attempt=0
+        while kill -0 "$pid" 2>/dev/null && [ "$attempt" -lt 5 ]; do
+            sleep 1
+            attempt=$((attempt + 1))
+        done
+    fi
+    if kill -0 "$pid" 2>/dev/null; then
+        echo "无法停止进程 $pid，请手工处理后重试" >&2
+        return 1
+    fi
+    rm -f "$pid_file"
+    return 0
 }
 
 if [ ! -x "$BASE_DIR/server" ] || [ ! -d "$BASE_DIR/dist" ]; then
