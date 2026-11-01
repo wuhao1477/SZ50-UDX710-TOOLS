@@ -1,4 +1,4 @@
-﻿export default {
+export default {
   // 通用文本
   common: {
     refresh: '刷新',
@@ -125,7 +125,6 @@
     systemDetails: '系统详情',
     systemName: '系统名称',
     kernelVersion: '内核版本',
-    qqGroup: '官方Q群',
     cacheCleared: '缓存清除成功',
     cacheClearFailed: '清除失败',
     confirmClearCache: '确定要清除系统缓存吗？',

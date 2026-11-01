@@ -768,7 +768,7 @@ async function handleClearCache() {
         <h3 class="text-slate-800 dark:text-white font-bold">{{ t('monitor.systemDetails') }}</h3>
       </div>
       
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="group p-4 bg-slate-100 dark:bg-white/5 rounded-2xl hover:bg-slate-200 dark:hover:bg-white/10 transition-all border border-slate-200 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/20">
           <div class="flex items-center space-x-4">
             <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-600 to-slate-500 flex items-center justify-center">
@@ -789,18 +789,6 @@ async function handleClearCache() {
             <div>
               <p class="text-slate-600 dark:text-white/50 text-xs">{{ t('monitor.kernelVersion') }}</p>
               <p class="text-slate-800 dark:text-white font-medium text-sm">{{ systemInfo?.release || 'N/A' }}</p>
-            </div>
-          </div>
-        </div>
-        
-        <div class="group p-4 bg-slate-100 dark:bg-white/5 rounded-2xl hover:bg-slate-200 dark:hover:bg-white/10 transition-all border border-slate-200 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/20">
-          <div class="flex items-center space-x-4">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center">
-              <i class="fab fa-qq text-white"></i>
-            </div>
-            <div>
-              <p class="text-slate-600 dark:text-white/50 text-xs">{{ t('monitor.qqGroup') }}</p>
-              <p class="text-slate-800 dark:text-white font-mono text-sm">1029148488</p>
             </div>
           </div>
         </div>

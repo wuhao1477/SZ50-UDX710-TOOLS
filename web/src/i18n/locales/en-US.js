@@ -125,7 +125,6 @@ export default {
     systemDetails: 'System Details',
     systemName: 'System Name',
     kernelVersion: 'Kernel Version',
-    qqGroup: 'QQ Group',
     cacheCleared: 'Cache cleared successfully',
     cacheClearFailed: 'Failed to clear cache',
     confirmClearCache: 'Are you sure to clear system cache?',

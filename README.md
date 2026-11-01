@@ -311,18 +311,6 @@ Special thanks to the following contributors:
 
 Thanks to all community members for your support and feedback!
 
-## ☕ Support the Project
-
-This project is completely open source and free. If you like this project, you can buy me a coffee~
-
-| Alipay | WeChat | QQ Group |
-|:---:|:---:|:---:|
-| <img src="docs/alipay.png" width="200" /> | <img src="docs/wechat.png" width="200" /> | <img src="docs/qq_group.png" width="200" /> |
-
-## 💬 Community
-
-Welcome to join the discussion!
-
-- **QQ Group**: 1029148488
+## 💬 Contributing
 
 Welcome to submit Issues / Pull Requests to improve the project 💡

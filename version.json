@@ -1,7 +1,7 @@
 {
-  "version": "v2.4.10",
+  "version": "v2.4.11",
   "url": "https://github.com/wuhao1477/SZ50-UDX710-TOOLS/releases/latest/download/udx710-tools-update.zip",
-  "changelog": "修复侧边栏「当前版本」一直显示 ... 的问题；版本比较改为按数字段比较，正确处理 2.4.10 > 2.4.9。",
+  "changelog": "清理遗留信息：移除界面「系统详情」里的官方 QQ 群卡片，以及 README 的捐赠/社群版块。",
   "size": 0,
   "required": false
 }

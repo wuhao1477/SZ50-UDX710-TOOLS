@@ -309,18 +309,6 @@ make
 
 感谢各位网友的支持与反馈！
 
-## ☕ 支持项目
-
-本项目完全开源免费，如果你喜欢这个项目的话，也可以请我喝一杯咖啡~
-
-| 支付宝 | 微信赞赏 | QQ群 |
-|:---:|:---:|:---:|
-| <img src="docs/alipay.png" width="200" /> | <img src="docs/wechat.png" width="200" /> | <img src="docs/qq_group.png" width="200" /> |
-
-## 💬 社区讨论
-
-欢迎加入群聊一起讨论！
-
-- **QQ群**: 1029148488
+## 💬 参与贡献
 
 欢迎提交 Issue / Pull Request 一起完善项目 💡
