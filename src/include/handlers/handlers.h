@@ -15,6 +15,12 @@ extern "C" {
 /* API 处理器 */
 void handle_info(struct mg_connection *c, struct mg_http_message *hm);
 void handle_health(struct mg_connection *c, struct mg_http_message *hm);
+void handle_telemetry_config(struct mg_connection *c,
+                             struct mg_http_message *hm);
+void handle_telemetry_status(struct mg_connection *c,
+                             struct mg_http_message *hm);
+void handle_telemetry_test(struct mg_connection *c,
+                           struct mg_http_message *hm);
 void handle_execute_at(struct mg_connection *c, struct mg_http_message *hm);
 void handle_set_network(struct mg_connection *c, struct mg_http_message *hm);
 void handle_switch(struct mg_connection *c, struct mg_http_message *hm);
@@ -23,6 +29,22 @@ void handle_device_control(struct mg_connection *c, struct mg_http_message *hm);
 void handle_clear_cache(struct mg_connection *c, struct mg_http_message *hm);
 void handle_get_current_band(struct mg_connection *c,
                              struct mg_http_message *hm);
+void handle_capabilities(struct mg_connection *c, struct mg_http_message *hm);
+void handle_builtin_cards(struct mg_connection *c, struct mg_http_message *hm);
+void handle_builtin_card_real_name(struct mg_connection *c,
+                                   struct mg_http_message *hm);
+void handle_builtin_card_switch(struct mg_connection *c,
+                                struct mg_http_message *hm);
+
+/* WiFi API */
+void handle_wifi_status(struct mg_connection *c, struct mg_http_message *hm);
+void handle_wifi_config(struct mg_connection *c, struct mg_http_message *hm);
+void handle_wifi_enable(struct mg_connection *c, struct mg_http_message *hm);
+void handle_wifi_disable(struct mg_connection *c, struct mg_http_message *hm);
+void handle_wifi_band(struct mg_connection *c, struct mg_http_message *hm);
+void handle_wifi_clients(struct mg_connection *c, struct mg_http_message *hm);
+void handle_wifi_blacklist(struct mg_connection *c, struct mg_http_message *hm);
+void handle_wifi_whitelist(struct mg_connection *c, struct mg_http_message *hm);
 
 /* 短信 API */
 void handle_sms_list(struct mg_connection *c, struct mg_http_message *hm);
@@ -34,6 +56,10 @@ void handle_sms_webhook_save(struct mg_connection *c,
                              struct mg_http_message *hm);
 void handle_sms_webhook_test(struct mg_connection *c,
                              struct mg_http_message *hm);
+void handle_notification_rules(struct mg_connection *c,
+                               struct mg_http_message *hm);
+void handle_notification_rule_item(struct mg_connection *c,
+                                   struct mg_http_message *hm);
 void handle_sms_sent_list(struct mg_connection *c, struct mg_http_message *hm);
 void handle_sms_sent_delete(struct mg_connection *c,
                             struct mg_http_message *hm);

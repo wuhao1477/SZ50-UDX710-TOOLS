@@ -7,9 +7,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define GOFORM_PROXY_TEXT_MAX 256
+
 typedef struct {
   char operation[32];
   char operator_id[16];
+  char ssid[GOFORM_PROXY_TEXT_MAX];
+  char password[GOFORM_PROXY_TEXT_MAX];
 } GoformProxyAsyncArg;
 
 static int proxy_get(const char *operation, char *response, size_t size) {
@@ -44,6 +48,10 @@ static int goform_proxy_worker(void *arg, char *response,
   if (proxy_get_operation_allowed(task->operation)) {
     return proxy_get(task->operation, response, response_size);
   }
+  if (strcmp(task->operation, "setapinfo") == 0) {
+    return goform_set_wifi_info(task->ssid, task->password, response,
+                                response_size);
+  }
   return builtin_card_switch_operator(task->operator_id, response,
                                       response_size, &priority);
 }
@@ -54,6 +62,8 @@ static void complete_goform_proxy(struct mg_connection *c, int result,
 
   if (result == 0) {
     HTTP_JSON(c, 200, response);
+  } else if (task && strcmp(task->operation, "setapinfo") == 0) {
+    HTTP_ERROR(c, 502, "WiFi 配置写入失败");
   } else if (task && strcmp(task->operation, "setPriorityMnc") == 0 &&
              result == -2) {
     HTTP_ERROR(c, 409, "当前设备不支持内置卡运营商切换");
@@ -73,6 +83,33 @@ static void complete_goform_proxy(struct mg_connection *c, int result,
   }
 }
 
+/* WiFi 配置写入。密码只透传到设备本地 goform，不会回显或落盘。 */
+static void handle_goform_setapinfo(struct mg_connection *c,
+                                    struct mg_http_message *hm) {
+  char *ssid = mg_json_get_str(hm->body, "$.ssid");
+  char *password = mg_json_get_str(hm->body, "$.password");
+  GoformProxyAsyncArg *task = NULL;
+
+  if (ssid && password && ssid[0] && password[0] &&
+      strlen(ssid) < GOFORM_PROXY_TEXT_MAX &&
+      strlen(password) < GOFORM_PROXY_TEXT_MAX) {
+    task = (GoformProxyAsyncArg *)calloc(1, sizeof(*task));
+    if (task) {
+      snprintf(task->operation, sizeof(task->operation), "setapinfo");
+      snprintf(task->ssid, sizeof(task->ssid), "%s", ssid);
+      snprintf(task->password, sizeof(task->password), "%s", password);
+    }
+  }
+  free(ssid);
+  free(password);
+
+  if (!task || goform_async_submit(c, goform_proxy_worker, task, free,
+                                   complete_goform_proxy) != 0) {
+    free(task);
+    HTTP_ERROR(c, 503, "goform 服务暂不可用");
+  }
+}
+
 void handle_goform_proxy(struct mg_connection *c, struct mg_http_message *hm) {
   char *operation;
   char *operator_id = NULL;
@@ -82,6 +119,16 @@ void handle_goform_proxy(struct mg_connection *c, struct mg_http_message *hm) {
   operation = mg_json_get_str(hm->body, "$.operation");
   if (!operation) {
     HTTP_ERROR(c, 400, "operation 参数无效");
+    return;
+  }
+  if (!goform_proxy_operation_allowed(operation)) {
+    free(operation);
+    HTTP_ERROR(c, 400, "goform 操作未允许");
+    return;
+  }
+  if (strcmp(operation, "setapinfo") == 0) {
+    free(operation);
+    handle_goform_setapinfo(c, hm);
     return;
   }
 
@@ -96,6 +143,7 @@ void handle_goform_proxy(struct mg_connection *c, struct mg_http_message *hm) {
     free(operation);
     if (!task || goform_async_submit(c, goform_proxy_worker, task, free,
                                      complete_goform_proxy) != 0) {
+      free(task);
       HTTP_ERROR(c, 503, "goform 服务暂不可用");
       return;
     }
@@ -127,6 +175,7 @@ void handle_goform_proxy(struct mg_connection *c, struct mg_http_message *hm) {
   free(operator_id);
   if (!task || goform_async_submit(c, goform_proxy_worker, task, free,
                                    complete_goform_proxy) != 0) {
+    free(task);
     HTTP_ERROR(c, 503, "goform 服务暂不可用");
   }
 }

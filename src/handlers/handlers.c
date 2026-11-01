@@ -7,19 +7,192 @@
 #include "airplane.h"
 #include "apn.h"
 #include "dbus_core.h"
+#include "device_profile.h"
 #include "exec_utils.h"
 #include "http_utils.h"
 #include "json_builder.h"
 #include "modem.h"
 #include "mongoose.h"
+#include "notification.h"
 #include "ofono.h"
 #include "sysinfo.h"
+#include "telemetry.h"
+#include "wifi.h"
 #include <dirent.h>
 #include <glib.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+
+static int extract_json_string(const char *json, const char *key, char *value,
+                               size_t value_size) {
+  char pattern[64];
+  const char *start;
+  const char *end;
+  size_t length;
+
+  if (!json || !key || !value || value_size == 0) {
+    return -1;
+  }
+  snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+  start = strstr(json, pattern);
+  if (!start) {
+    return -1;
+  }
+  start = strchr(start + strlen(pattern), ':');
+  if (!start) {
+    return -1;
+  }
+  start = strchr(start, '"');
+  if (!start) {
+    return -1;
+  }
+  start++;
+  end = strchr(start, '"');
+  if (!end) {
+    return -1;
+  }
+  length = (size_t)(end - start);
+  if (length >= value_size) {
+    length = value_size - 1;
+  }
+  memcpy(value, start, length);
+  value[length] = '\0';
+  return 0;
+}
+
+static void add_telemetry_config_json(JsonBuilder *json,
+                                      const TelemetryConfig *config) {
+  json_obj_open(json);
+  json_add_bool(json, "enabled", config->enabled);
+  json_add_str(json, "url", config->url);
+  json_add_int(json, "interval_sec", config->interval_sec);
+  json_add_bool(json, "token_configured",
+                config->token_present && config->group_token[0] != '\0');
+  json_obj_close(json);
+}
+
+/* GET/POST /api/telemetry/config - 获取或保存上传配置 */
+void handle_telemetry_config(struct mg_connection *c,
+                             struct mg_http_message *hm) {
+  TelemetryConfig config;
+  bool enabled;
+  bool clear_token = false;
+  long interval;
+  char *url = NULL;
+  char *token = NULL;
+
+  HTTP_CHECK_ANY(c, hm);
+  if (http_is_method(hm, "GET")) {
+    if (telemetry_get_config(&config) != 0) {
+      HTTP_ERROR(c, 500, "获取遥测配置失败");
+      return;
+    }
+    JsonBuilder *json = json_new();
+    if (!json) {
+      HTTP_ERROR(c, 500, "生成响应失败");
+      return;
+    }
+    add_telemetry_config_json(json, &config);
+    HTTP_OK_FREE(c, json_finish(json));
+    return;
+  }
+  if (!http_is_method(hm, "POST")) {
+    http_method_error(c);
+    return;
+  }
+
+  if (telemetry_get_config(&config) != 0) {
+    HTTP_ERROR(c, 500, "获取遥测配置失败");
+    return;
+  }
+  enabled = config.enabled != 0;
+  mg_json_get_bool(hm->body, "$.enabled", &enabled);
+  config.enabled = enabled ? 1 : 0;
+  interval = mg_json_get_long(hm->body, "$.interval_sec", config.interval_sec);
+  config.interval_sec = (int)interval;
+  url = mg_json_get_str(hm->body, "$.url");
+  if (url) {
+    snprintf(config.url, sizeof(config.url), "%s", url);
+    free(url);
+  }
+  token = mg_json_get_str(hm->body, "$.token");
+  if (token) {
+    snprintf(config.group_token, sizeof(config.group_token), "%s", token);
+    config.token_present = config.group_token[0] != '\0';
+    free(token);
+  }
+  mg_json_get_bool(hm->body, "$.clear_token", &clear_token);
+  if (telemetry_save_config(&config, clear_token ? 1 : 0) != 0) {
+    HTTP_ERROR(c, 400, "遥测配置无效");
+    return;
+  }
+  HTTP_SUCCESS(c, "遥测配置已保存");
+}
+
+/* GET /api/telemetry/status - 获取上传运行状态 */
+void handle_telemetry_status(struct mg_connection *c,
+                             struct mg_http_message *hm) {
+  TelemetryStatus status;
+  JsonBuilder *json;
+
+  HTTP_CHECK_GET(c, hm);
+  if (telemetry_get_status(&status) != 0) {
+    HTTP_ERROR(c, 500, "获取遥测状态失败");
+    return;
+  }
+  json = json_new();
+  if (!json) {
+    HTTP_ERROR(c, 500, "生成响应失败");
+    return;
+  }
+  json_obj_open(json);
+  json_add_bool(json, "running", status.running);
+  json_add_long(json, "last_success", (long long)status.last_success);
+  json_add_long(json, "last_failure", (long long)status.last_failure);
+  json_add_ulong(json, "sent_count", (unsigned long)status.sent_count);
+  json_add_ulong(json, "failed_count", (unsigned long)status.failed_count);
+  json_add_str(json, "last_error", status.last_error);
+  json_obj_close(json);
+  HTTP_OK_FREE(c, json_finish(json));
+}
+
+/* POST /api/telemetry/test - 测试接收端鉴权 */
+void handle_telemetry_test(struct mg_connection *c,
+                           struct mg_http_message *hm) {
+  TelemetryConfig config;
+  char *url = NULL;
+  char *token = NULL;
+  bool clear_token = false;
+
+  HTTP_CHECK_POST(c, hm);
+  if (telemetry_get_config(&config) != 0) {
+    HTTP_ERROR(c, 502, "遥测接收端连接失败");
+    return;
+  }
+  url = mg_json_get_str(hm->body, "$.url");
+  if (url) {
+    snprintf(config.url, sizeof(config.url), "%s", url);
+    free(url);
+  }
+  token = mg_json_get_str(hm->body, "$.token");
+  if (token) {
+    snprintf(config.group_token, sizeof(config.group_token), "%s", token);
+    config.token_present = config.group_token[0] != '\0';
+    free(token);
+  }
+  mg_json_get_bool(hm->body, "$.clear_token", &clear_token);
+  if (clear_token) {
+    config.group_token[0] = '\0';
+    config.token_present = 0;
+  }
+  if (telemetry_test(&config) != 0) {
+    HTTP_ERROR(c, 502, "遥测接收端连接失败");
+    return;
+  }
+  HTTP_SUCCESS(c, "遥测接收端连接成功");
+}
 
 /* GET /api/info - 获取系统信息 */
 void handle_info(struct mg_connection *c, struct mg_http_message *hm) {
@@ -45,6 +218,8 @@ void handle_info(struct mg_connection *c, struct mg_http_message *hm) {
   json_add_str(j, "signal_strength", info.signal_strength);
   json_add_double(j, "thermal_temp", info.thermal_temp);
   json_add_str(j, "power_status", info.power_status);
+  json_add_str(j, "power_source", info.power_source);
+  json_add_bool(j, "battery_supported", info.battery_supported);
   json_add_str(j, "battery_health", info.battery_health);
   json_add_int(j, "battery_capacity", info.battery_capacity);
   json_add_str(j, "ssid", info.ssid);
@@ -66,6 +241,43 @@ void handle_info(struct mg_connection *c, struct mg_http_message *hm) {
   json_obj_close(j);
 
   HTTP_OK_FREE(c, json_finish(j));
+}
+
+/* GET /api/capabilities - 获取当前设备能力 */
+void handle_capabilities(struct mg_connection *c, struct mg_http_message *hm) {
+  HTTP_CHECK_GET(c, hm);
+
+  device_profile_refresh();
+  const DeviceProfile *profile = device_profile_get();
+  mg_http_reply(
+      c, 200, HTTP_CORS_HEADERS,
+      "{\"power\":{\"source\":\"%s\",\"battery_supported\":%s},"
+      "\"wifi\":{\"interface\":\"%s\",\"config\":\"%s\"},"
+      "\"cellular\":{\"interface\":\"%s\"},"
+      "\"rj45\":{\"physical_present\":%s,\"interface_present\":%s,"
+      "\"link_up\":%s,\"usable\":%s,\"interface\":\"%s\","
+      "\"reason\":\"%s\"},"
+      "\"typec\":{\"present\":%s,\"host_capable\":%s,"
+      "\"gadget_vid\":\"%s\",\"gadget_pid\":\"%s\","
+      "\"rndis\":%s,\"link_up\":%s,\"interface\":\"%s\","
+      "\"mode_switch_supported\":%s},"
+      "\"led\":{\"red\":%s,\"green\":%s,\"blue\":%s}}",
+      profile->mains_powered ? "external" : "battery",
+      profile->battery_supported ? "true" : "false",
+      profile->wifi_iface, profile->wifi_config, profile->data_iface,
+      profile->rj45_physical_present ? "true" : "false",
+      profile->rj45_interface_present ? "true" : "false",
+      profile->rj45_link_up ? "true" : "false",
+      profile->rj45_usable ? "true" : "false", profile->rj45_iface,
+      profile->reason_rj45,
+      profile->typec_present ? "true" : "false",
+      profile->typec_host_capable ? "true" : "false", profile->usb_vid,
+      profile->usb_pid, profile->usb_rndis_available ? "true" : "false",
+      profile->usb_rndis_link_up ? "true" : "false", profile->usb_rndis_iface,
+      profile->usb_mode_switch_supported ? "true" : "false",
+      profile->led_red[0] ? "true" : "false",
+      profile->led_green[0] ? "true" : "false",
+      profile->led_blue[0] ? "true" : "false");
 }
 
 /* POST /api/at - 执行 AT 命令 */
@@ -594,8 +806,8 @@ void handle_sms_webhook_get(struct mg_connection *c,
                             struct mg_http_message *hm) {
   HTTP_CHECK_GET(c, hm);
 
-  WebhookConfig config;
-  if (sms_get_webhook_config(&config) != 0) {
+  NotificationWebhookConfig config;
+  if (notification_get_webhook_config(&config) != 0) {
     HTTP_ERROR(c, 500, "获取配置失败");
     return;
   }
@@ -628,7 +840,7 @@ void handle_sms_webhook_save(struct mg_connection *c,
                              struct mg_http_message *hm) {
   HTTP_CHECK_POST(c, hm);
 
-  WebhookConfig config = {0};
+  NotificationWebhookConfig config = {0};
 
   /* 使用mongoose JSON API解析 */
   bool enabled = false;
@@ -643,7 +855,7 @@ void handle_sms_webhook_save(struct mg_connection *c,
   mg_json_get_str_to_buf(hm->body, "$.headers", config.headers,
                          sizeof(config.headers));
 
-  if (sms_save_webhook_config(&config) == 0) {
+  if (notification_save_webhook_config(&config) == 0) {
     HTTP_SUCCESS(c, "配置已保存");
   } else {
     HTTP_ERROR(c, 500, "保存配置失败");
@@ -655,11 +867,121 @@ void handle_sms_webhook_test(struct mg_connection *c,
                              struct mg_http_message *hm) {
   HTTP_CHECK_POST(c, hm);
 
-  if (sms_test_webhook() == 0) {
+  if (notification_test_webhook() == 0) {
     HTTP_SUCCESS(c, "测试通知已发送");
   } else {
     HTTP_ERROR(c, 500, "Webhook未启用或URL为空");
   }
+}
+
+static int parse_notification_rule(struct mg_http_message *hm,
+                                   NotificationRule *rule) {
+  char *event_id = mg_json_get_str(hm->body, "$.event_type");
+  char *unit = mg_json_get_str(hm->body, "$.threshold_unit");
+  bool enabled = true;
+  double threshold = 0;
+  long cooldown = mg_json_get_long(hm->body, "$.cooldown_sec", 300);
+  int has_threshold = mg_json_get_num(hm->body, "$.threshold", &threshold);
+  int has_enabled = mg_json_get_bool(hm->body, "$.enabled", &enabled);
+  NotificationEventType type;
+
+  memset(rule, 0, sizeof(*rule));
+  if (!event_id || notification_event_from_id(event_id, &type) != 0 ||
+      cooldown < 0 || cooldown > 86400 ||
+      (!has_threshold &&
+       (type == NOTIFICATION_EVENT_SIGNAL_LOW ||
+        type == NOTIFICATION_EVENT_TRAFFIC_THRESHOLD))) {
+    free(event_id);
+    free(unit);
+    return -1;
+  }
+  rule->type = type;
+  rule->enabled = has_enabled ? (enabled ? 1 : 0) : 1;
+  rule->threshold = has_threshold ? threshold : 0;
+  rule->cooldown_sec = (int)cooldown;
+  if (unit) {
+    snprintf(rule->threshold_unit, sizeof(rule->threshold_unit), "%s", unit);
+  } else if (type == NOTIFICATION_EVENT_SIGNAL_LOW ||
+             type == NOTIFICATION_EVENT_TRAFFIC_THRESHOLD) {
+    snprintf(rule->threshold_unit, sizeof(rule->threshold_unit), "percent");
+  } else {
+    snprintf(rule->threshold_unit, sizeof(rule->threshold_unit), "state");
+  }
+  free(event_id);
+  free(unit);
+  return notification_rule_validate(rule);
+}
+
+/* GET /api/notifications/rules - 获取通知列表；POST - 添加通知 */
+void handle_notification_rules(struct mg_connection *c,
+                               struct mg_http_message *hm) {
+  NotificationRule rules[NOTIFICATION_MAX_RULES];
+  int count;
+  if (http_is_method(hm, "GET")) {
+    count = notification_get_rules(rules, NOTIFICATION_MAX_RULES);
+    if (count < 0) {
+      HTTP_ERROR(c, 500, "获取通知列表失败");
+      return;
+    }
+    JsonBuilder *json = json_new();
+    json_obj_open(json);
+    json_arr_open(json, "rules");
+    for (int i = 0; i < count; i++) {
+      json_arr_obj_open(json);
+      json_add_int(json, "id", rules[i].id);
+      json_add_str(json, "event_type", notification_event_id(rules[i].type));
+      json_add_bool(json, "enabled", rules[i].enabled);
+      json_add_double(json, "threshold", rules[i].threshold);
+      json_add_str(json, "threshold_unit", rules[i].threshold_unit);
+      json_add_int(json, "cooldown_sec", rules[i].cooldown_sec);
+      json_obj_close(json);
+    }
+    json_arr_close(json);
+    json_obj_close(json);
+    HTTP_OK_FREE(c, json_finish(json));
+    return;
+  }
+  HTTP_CHECK_POST(c, hm);
+  NotificationRule rule;
+  if (parse_notification_rule(hm, &rule) != 0 ||
+      notification_add_rule(&rule) != 0) {
+    HTTP_ERROR(c, 400, "通知项参数无效或事件已存在");
+    return;
+  }
+  HTTP_SUCCESS(c, "通知项已添加");
+}
+
+/* PUT/DELETE /api/notifications/rules/:id - 修改或删除通知项 */
+void handle_notification_rule_item(struct mg_connection *c,
+                                   struct mg_http_message *hm) {
+  char uri[128] = {0};
+  int id;
+  size_t length = hm->uri.len < sizeof(uri) - 1 ? hm->uri.len : sizeof(uri) - 1;
+  memcpy(uri, hm->uri.buf, length);
+  if (sscanf(uri, "/api/notifications/rules/%d", &id) != 1 || id <= 0) {
+    HTTP_ERROR(c, 400, "通知项 ID 无效");
+    return;
+  }
+  if (http_is_method(hm, "DELETE")) {
+    if (notification_delete_rule(id) != 0) {
+      HTTP_ERROR(c, 404, "通知项不存在");
+      return;
+    }
+    HTTP_SUCCESS(c, "通知项已删除");
+    return;
+  }
+  HTTP_CHECK_PUT(c, hm);
+  NotificationRule rule;
+  if (parse_notification_rule(hm, &rule) != 0) {
+    HTTP_ERROR(c, 400, "通知项参数无效");
+    return;
+  }
+  rule.id = id;
+  if (notification_update_rule(&rule) != 0) {
+    HTTP_ERROR(c, 404, "通知项不存在或事件已存在");
+    return;
+  }
+  HTTP_SUCCESS(c, "通知项已更新");
 }
 
 /* GET /api/sms/sent - 获取发送记录列表 */
@@ -806,6 +1128,376 @@ void handle_sms_fix_set(struct mg_connection *c, struct mg_http_message *hm) {
 }
 
 /* ==================== OTA更新 API ==================== */
+/* ==================== WiFi API ==================== */
+#include "wifi.h"
+
+/* GET /api/wifi/status - 获取WiFi状态 */
+void handle_wifi_status(struct mg_connection *c, struct mg_http_message *hm) {
+    if (hm->method.len == 7 && memcmp(hm->method.buf, "OPTIONS", 7) == 0) {
+        mg_http_reply(c, 200, "Access-Control-Allow-Origin: *\r\n"
+                              "Access-Control-Allow-Methods: GET, OPTIONS\r\n"
+                              "Access-Control-Allow-Headers: Content-Type\r\n", "");
+        return;
+    }
+
+    WifiConfig config;
+    if (wifi_get_status(&config) != 0) {
+        mg_http_reply(c, 500, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+            "{\"error\":\"获取WiFi状态失败\"}");
+        return;
+    }
+
+    char json[1024];
+    snprintf(json, sizeof(json),
+        "{\"enabled\":%s,\"band\":\"%s\",\"ssid\":\"%s\",\"password\":\"%s\",\"channel\":%d,"
+        "\"encryption\":\"%s\",\"hidden\":%s,\"max_clients\":%d}",
+        config.enabled ? "true" : "false", config.band, config.ssid, config.password, config.channel,
+        config.encryption, config.hidden ? "true" : "false", config.max_clients);
+
+    mg_http_reply(c, 200, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+        "%s", json);
+}
+
+/* POST /api/wifi/config - 设置WiFi配置 */
+void handle_wifi_config(struct mg_connection *c, struct mg_http_message *hm) {
+    if (hm->method.len == 7 && memcmp(hm->method.buf, "OPTIONS", 7) == 0) {
+        mg_http_reply(c, 200, "Access-Control-Allow-Origin: *\r\n"
+                              "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                              "Access-Control-Allow-Headers: Content-Type\r\n", "");
+        return;
+    }
+
+    struct mg_str body = hm->body;
+    char ssid[64] = {0}, password[64] = {0}, band[16] = {0};
+    int channel = 0, hidden = -1, max_clients = 0;
+
+    /* 解析JSON字段 */
+    extract_json_string(body.buf, "ssid", ssid, sizeof(ssid));
+    extract_json_string(body.buf, "password", password, sizeof(password));
+    extract_json_string(body.buf, "band", band, sizeof(band));
+
+    double val;
+    if (mg_json_get_num(body, "$.channel", &val)) channel = (int)val;
+    if (mg_json_get_num(body, "$.max_clients", &val)) max_clients = (int)val;
+
+    if (strstr(body.buf, "\"hidden\":true")) hidden = 1;
+    else if (strstr(body.buf, "\"hidden\":false")) hidden = 0;
+
+    /* 应用配置 */
+    int changed = 0;
+    if ((strlen(ssid) > 0 || strlen(password) >= 8) &&
+        wifi_set_ap_info(strlen(ssid) > 0 ? ssid : NULL,
+                         strlen(password) >= 8 ? password : NULL) == 0) {
+        changed++;
+    }
+    if (strlen(band) > 0 && wifi_set_band(band) == 0) changed++;
+    if (channel > 0 && wifi_set_channel(channel) == 0) changed++;
+    if (hidden >= 0 && wifi_set_hidden(hidden) == 0) changed++;
+    if (max_clients > 0 && wifi_set_max_clients(max_clients) == 0) changed++;
+
+    mg_http_reply(c, 200, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+        "{\"status\":\"success\",\"changes\":%d}", changed);
+}
+
+/* POST /api/wifi/enable - 启用WiFi */
+void handle_wifi_enable(struct mg_connection *c, struct mg_http_message *hm) {
+    if (hm->method.len == 7 && memcmp(hm->method.buf, "OPTIONS", 7) == 0) {
+        mg_http_reply(c, 200, "Access-Control-Allow-Origin: *\r\n"
+                              "Access-Control-Allow-Methods: POST, OPTIONS\r\n"
+                              "Access-Control-Allow-Headers: Content-Type\r\n", "");
+        return;
+    }
+
+    char band[16] = {0};
+    extract_json_string(hm->body.buf, "band", band, sizeof(band));
+
+    if (wifi_enable(strlen(band) > 0 ? band : NULL) == 0) {
+        mg_http_reply(c, 200, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+            "{\"status\":\"success\",\"message\":\"WiFi已启用\"}");
+    } else {
+        mg_http_reply(c, 500, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+            "{\"error\":\"启用WiFi失败\"}");
+    }
+}
+
+/* POST /api/wifi/disable - 禁用WiFi */
+void handle_wifi_disable(struct mg_connection *c, struct mg_http_message *hm) {
+    if (hm->method.len == 7 && memcmp(hm->method.buf, "OPTIONS", 7) == 0) {
+        mg_http_reply(c, 200, "Access-Control-Allow-Origin: *\r\n"
+                              "Access-Control-Allow-Methods: POST, OPTIONS\r\n"
+                              "Access-Control-Allow-Headers: Content-Type\r\n", "");
+        return;
+    }
+
+    if (wifi_disable() == 0) {
+        mg_http_reply(c, 200, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+            "{\"status\":\"success\",\"message\":\"WiFi已禁用\"}");
+    } else {
+        mg_http_reply(c, 500, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+            "{\"error\":\"禁用WiFi失败\"}");
+    }
+}
+
+/* POST /api/wifi/band - 切换WiFi频段 */
+void handle_wifi_band(struct mg_connection *c, struct mg_http_message *hm) {
+    if (hm->method.len == 7 && memcmp(hm->method.buf, "OPTIONS", 7) == 0) {
+        mg_http_reply(c, 200, "Access-Control-Allow-Origin: *\r\n"
+                              "Access-Control-Allow-Methods: POST, OPTIONS\r\n"
+                              "Access-Control-Allow-Headers: Content-Type\r\n", "");
+        return;
+    }
+
+    char band[16] = {0};
+    extract_json_string(hm->body.buf, "band", band, sizeof(band));
+
+    if (strlen(band) == 0) {
+        mg_http_reply(c, 400, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+            "{\"error\":\"频段参数不能为空\"}");
+        return;
+    }
+
+    if (wifi_set_band(band) == 0) {
+        mg_http_reply(c, 200, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+            "{\"status\":\"success\",\"band\":\"%s\"}", band);
+    } else {
+        mg_http_reply(c, 500, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+            "{\"error\":\"切换频段失败\"}");
+    }
+}
+
+
+/* ==================== WiFi 客户端管理 API ==================== */
+
+/* GET /api/wifi/clients - 获取已连接客户端列表 */
+void handle_wifi_clients(struct mg_connection *c, struct mg_http_message *hm) {
+    if (hm->method.len == 7 && memcmp(hm->method.buf, "OPTIONS", 7) == 0) {
+        mg_http_reply(c, 200, "Access-Control-Allow-Origin: *\r\n"
+                              "Access-Control-Allow-Methods: GET, OPTIONS\r\n"
+                              "Access-Control-Allow-Headers: Content-Type\r\n", "");
+        return;
+    }
+
+    WifiClient clients[64];
+    int count = wifi_get_clients(clients, 64);
+
+    if (count < 0) {
+        mg_http_reply(c, 500, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+            "{\"error\":\"获取客户端列表失败\"}");
+        return;
+    }
+
+    char json[16384];
+    int offset = snprintf(json, sizeof(json), "[");
+
+    for (int i = 0; i < count; i++) {
+        unsigned long total = clients[i].rx_bytes + clients[i].tx_bytes;
+        offset += snprintf(json + offset, sizeof(json) - offset,
+            "%s{\"mac\":\"%s\",\"ipv4\":\"%s\",\"ipv6\":\"%s\",\"interface\":\"%s\",\"access_type\":\"%s\",\"rx_bytes\":%lu,\"tx_bytes\":%lu,\"total\":%lu,\"signal\":%d,\"connected_time\":%d}",
+            i > 0 ? "," : "",
+            clients[i].mac, clients[i].ipv4, clients[i].ipv6,
+            clients[i].interface, clients[i].access_type, clients[i].rx_bytes,
+            clients[i].tx_bytes, total,
+            clients[i].signal, clients[i].connected_time);
+    }
+
+    snprintf(json + offset, sizeof(json) - offset, "]");
+
+    mg_http_reply(c, 200, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+        "%s", json);
+}
+
+/* /api/wifi/blacklist - 黑名单管理 */
+void handle_wifi_blacklist(struct mg_connection *c, struct mg_http_message *hm) {
+    /* OPTIONS 预检 */
+    if (hm->method.len == 7 && memcmp(hm->method.buf, "OPTIONS", 7) == 0) {
+        mg_http_reply(c, 200, "Access-Control-Allow-Origin: *\r\n"
+                              "Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\n"
+                              "Access-Control-Allow-Headers: Content-Type\r\n", "");
+        return;
+    }
+
+    /* GET - 获取黑名单列表 */
+    if (hm->method.len == 3 && memcmp(hm->method.buf, "GET", 3) == 0) {
+        char macs[128][18];
+        int count = wifi_blacklist_list(macs, 128);
+
+        if (count < 0) {
+            mg_http_reply(c, 500, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                "{\"error\":\"获取黑名单失败\"}");
+            return;
+        }
+
+        char json[4096];
+        int offset = snprintf(json, sizeof(json), "[");
+        for (int i = 0; i < count; i++) {
+            offset += snprintf(json + offset, sizeof(json) - offset,
+                "%s\"%s\"", i > 0 ? "," : "", macs[i]);
+        }
+        snprintf(json + offset, sizeof(json) - offset, "]");
+
+        mg_http_reply(c, 200, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+            "%s", json);
+        return;
+    }
+
+    /* POST - 添加到黑名单 */
+    if (hm->method.len == 4 && memcmp(hm->method.buf, "POST", 4) == 0) {
+        char mac[32] = {0};
+        extract_json_string(hm->body.buf, "mac", mac, sizeof(mac));
+
+        if (strlen(mac) < 17) {
+            mg_http_reply(c, 400, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                "{\"error\":\"MAC地址无效\"}");
+            return;
+        }
+
+        if (wifi_blacklist_add(mac) == 0) {
+            mg_http_reply(c, 200, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                "{\"status\":\"success\",\"message\":\"已添加到黑名单并踢出\"}");
+        } else {
+            mg_http_reply(c, 500, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                "{\"error\":\"添加黑名单失败\"}");
+        }
+        return;
+    }
+
+    /* DELETE - 删除或清空黑名单 */
+    if (hm->method.len == 6 && memcmp(hm->method.buf, "DELETE", 6) == 0) {
+        /* 检查URL是否包含MAC地址: /api/wifi/blacklist/xx:xx:xx:xx:xx:xx */
+        const char *mac_start = strstr(hm->uri.buf, "/api/wifi/blacklist/");
+        if (mac_start && strlen(mac_start) > 20) {
+            mac_start += 20;  /* 跳过 "/api/wifi/blacklist/" */
+            char mac[32] = {0};
+            size_t len = 0;
+            while (mac_start[len] && mac_start[len] != '?' && mac_start[len] != ' ' && len < 17) {
+                mac[len] = mac_start[len];
+                len++;
+            }
+            mac[len] = '\0';
+
+            if (len >= 17) {
+                if (wifi_blacklist_del(mac) == 0) {
+                    mg_http_reply(c, 200, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                        "{\"status\":\"success\",\"message\":\"已从黑名单移除\"}");
+                } else {
+                    mg_http_reply(c, 500, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                        "{\"error\":\"移除黑名单失败\"}");
+                }
+                return;
+            }
+        }
+
+        /* 无MAC参数则清空黑名单 */
+        if (wifi_blacklist_clear() == 0) {
+            mg_http_reply(c, 200, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                "{\"status\":\"success\",\"message\":\"黑名单已清空\"}");
+        } else {
+            mg_http_reply(c, 500, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                "{\"error\":\"清空黑名单失败\"}");
+        }
+        return;
+    }
+
+    mg_http_reply(c, 405, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+        "{\"error\":\"Method not allowed\"}");
+}
+
+/* /api/wifi/whitelist - 白名单管理 */
+void handle_wifi_whitelist(struct mg_connection *c, struct mg_http_message *hm) {
+    /* OPTIONS 预检 */
+    if (hm->method.len == 7 && memcmp(hm->method.buf, "OPTIONS", 7) == 0) {
+        mg_http_reply(c, 200, "Access-Control-Allow-Origin: *\r\n"
+                              "Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\n"
+                              "Access-Control-Allow-Headers: Content-Type\r\n", "");
+        return;
+    }
+
+    /* GET - 获取白名单列表 */
+    if (hm->method.len == 3 && memcmp(hm->method.buf, "GET", 3) == 0) {
+        char macs[128][18];
+        int count = wifi_whitelist_list(macs, 128);
+
+        if (count < 0) {
+            mg_http_reply(c, 500, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                "{\"error\":\"获取白名单失败\"}");
+            return;
+        }
+
+        char json[4096];
+        int offset = snprintf(json, sizeof(json), "[");
+        for (int i = 0; i < count; i++) {
+            offset += snprintf(json + offset, sizeof(json) - offset,
+                "%s\"%s\"", i > 0 ? "," : "", macs[i]);
+        }
+        snprintf(json + offset, sizeof(json) - offset, "]");
+
+        mg_http_reply(c, 200, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+            "%s", json);
+        return;
+    }
+
+    /* POST - 添加到白名单 */
+    if (hm->method.len == 4 && memcmp(hm->method.buf, "POST", 4) == 0) {
+        char mac[32] = {0};
+        extract_json_string(hm->body.buf, "mac", mac, sizeof(mac));
+
+        if (strlen(mac) < 17) {
+            mg_http_reply(c, 400, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                "{\"error\":\"MAC地址无效\"}");
+            return;
+        }
+
+        if (wifi_whitelist_add(mac) == 0) {
+            mg_http_reply(c, 200, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                "{\"status\":\"success\",\"message\":\"已添加到白名单\"}");
+        } else {
+            mg_http_reply(c, 500, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                "{\"error\":\"添加白名单失败\"}");
+        }
+        return;
+    }
+
+    /* DELETE - 删除或清空白名单 */
+    if (hm->method.len == 6 && memcmp(hm->method.buf, "DELETE", 6) == 0) {
+        /* 检查URL是否包含MAC地址 */
+        const char *mac_start = strstr(hm->uri.buf, "/api/wifi/whitelist/");
+        if (mac_start && strlen(mac_start) > 20) {
+            mac_start += 20;
+            char mac[32] = {0};
+            size_t len = 0;
+            while (mac_start[len] && mac_start[len] != '?' && mac_start[len] != ' ' && len < 17) {
+                mac[len] = mac_start[len];
+                len++;
+            }
+            mac[len] = '\0';
+
+            if (len >= 17) {
+                if (wifi_whitelist_del(mac) == 0) {
+                    mg_http_reply(c, 200, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                        "{\"status\":\"success\",\"message\":\"已从白名单移除\"}");
+                } else {
+                    mg_http_reply(c, 500, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                        "{\"error\":\"移除白名单失败\"}");
+                }
+                return;
+            }
+        }
+
+        /* 无MAC参数则清空白名单 */
+        if (wifi_whitelist_clear() == 0) {
+            mg_http_reply(c, 200, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                "{\"status\":\"success\",\"message\":\"白名单已清空\"}");
+        } else {
+            mg_http_reply(c, 500, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+                "{\"error\":\"清空白名单失败\"}");
+        }
+        return;
+    }
+
+    mg_http_reply(c, 405, "Content-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\n",
+        "{\"error\":\"Method not allowed\"}");
+}
+
 #include "update.h"
 
 /* GET /api/update/version - 获取当前版本 */
@@ -1835,6 +2527,12 @@ void handle_auth_login(struct mg_connection *c, struct mg_http_message *hm) {
   int ret = auth_login(password, token, sizeof(token));
 
   if (ret == 0) {
+    NotificationEvent event = {0};
+    event.type = NOTIFICATION_EVENT_LOGIN;
+    snprintf(event.title, sizeof(event.title), "登录提醒");
+    snprintf(event.message, sizeof(event.message), "管理界面登录成功");
+    event.timestamp = time(NULL);
+    notification_emit(&event);
     JsonBuilder *j = json_new();
     json_obj_open(j);
     json_add_str(j, "status", "success");
@@ -2986,7 +3684,7 @@ void handle_sms_webhook_logs(struct mg_connection *c,
     return;
   }
 
-  if (sms_get_webhook_logs(logs_json, 512 * 1024, max_lines) != 0) {
+  if (notification_get_logs(logs_json, 512 * 1024, max_lines) != 0) {
     free(logs_json);
     HTTP_ERROR(c, 500, "获取日志失败");
     return;

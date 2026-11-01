@@ -14,20 +14,36 @@ jobs:
 
       - name: Install dependencies
         run: |
-          curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
           sudo apt-get update
-          sudo apt-get install -y nodejs gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          sudo apt-get install -y nodejs xz-utils zip
+          corepack enable
+          corepack prepare pnpm@10.6.5 --activate
+
+      - name: Cache cross compiler (aarch64)
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/tools/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu
+          key: gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu-glibc-2.25
 
       - name: Configure cross compiler (aarch64)
         run: |
-          command -v aarch64-linux-gnu-gcc
-          command -v aarch64-linux-gnu-strip
-          aarch64-linux-gnu-gcc --version
+          set -e
+          toolchain_root="$GITHUB_WORKSPACE/tools/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu"
+          archive="$GITHUB_WORKSPACE/tools/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz"
+          if [ ! -x "$toolchain_root/bin/aarch64-linux-gnu-gcc" ]; then
+            curl -fsSL --retry 3 \
+              https://media.githubusercontent.com/media/tiiuae/rpi4-64-sel4-u-boot-build/master/tools/linaro/aarch64-linux-gnu/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz \
+              -o "$archive"
+            echo "3b6465fb91564b54bbdf9578b4cc3aa198dd363f7a43820eab06ea2932c8e0bf  $archive" | sha256sum -c -
+            tar -xJf "$archive" -C "$GITHUB_WORKSPACE/tools"
+          fi
+          echo "PATH=$PATH:$toolchain_root/bin" >> "$GITHUB_ENV"
 
       - name: build web
         run: |
           cd web
-          npm install && npm run build
+          pnpm install --lockfile=false
+          pnpm run build
 
       - name: build server
         run: |
@@ -51,13 +67,21 @@ jobs:
       - name: dopack
         run: |
           mkdir -p output/6677
-          echo "#!/bin/sh" > start.sh
-          echo "cd /home/root/6677" >> start.sh
-          echo "chmod 755 *" >> start.sh
-          echo "./server &" >> start.sh
-          mv start.sh output/6677/
           cp -r web/dist output/6677/
           cp src/build/ofono-server output/6677/server
+          cp tools/start.sh output/6677/start.sh
+          cp tools/rj45_bridge_watch.sh output/6677/rj45_bridge_watch.sh
+          chmod 755 output/6677/server output/6677/start.sh output/6677/rj45_bridge_watch.sh
+          mkdir -p output/update-package
+          cp src/build/ofono-server output/update-package/server
+          cp -r web/dist output/update-package/
+          cp tools/start.sh output/update-package/start.sh
+          cp tools/rj45_bridge_watch.sh output/update-package/rj45_bridge_watch.sh
+          cp tools/update_install.sh output/update-package/install.sh
+          chmod 755 output/update-package/server output/update-package/install.sh \
+            output/update-package/start.sh output/update-package/rj45_bridge_watch.sh
+          (cd output/update-package && zip -qr ../udx710-tools-update.zip .)
+          rm -rf output/update-package
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

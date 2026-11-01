@@ -92,8 +92,7 @@ export async function fetchSystemInfo() {
   return request('/api/info')
 }
 
-// ==================== 内置卡运营商 API ====================
-
+// ==================== 内置卡运营商 API =============
 export async function getBuiltinCards() {
   return request('/api/builtin-cards')
 }
@@ -125,6 +124,29 @@ export async function fetchHealth() {
   return request('/api/health', { cache: 'no-store' })
 }
 
+// 日志与遥测上传 API
+export async function getTelemetryConfig() {
+  return request('/api/telemetry/config')
+}
+
+export async function saveTelemetryConfig(config) {
+  return request('/api/telemetry/config', {
+    method: 'POST',
+    body: JSON.stringify(config)
+  })
+}
+
+export async function getTelemetryStatus() {
+  return request('/api/telemetry/status')
+}
+
+export async function testTelemetry(config = {}) {
+  return request('/api/telemetry/test', {
+    method: 'POST',
+    body: JSON.stringify(config)
+  })
+}
+
 // 清除系统缓存
 export async function clearCache() {
   return request('/api/clear_cache', { method: 'POST' })
@@ -149,6 +171,114 @@ export async function submitActivationKey(key) {
     method: 'POST',
     body: JSON.stringify({ key })
   })
+}
+
+// ==================== 设备能力 API ====================
+
+export async function getCapabilities() {
+  return request('/api/capabilities')
+}
+
+// ==================== WiFi API ====================
+
+export async function getWifiStatus() {
+  return request('/api/wifi/status')
+}
+
+export async function setWifiConfig(config) {
+  return request('/api/wifi/config', {
+    method: 'POST',
+    body: JSON.stringify(config)
+  })
+}
+
+export async function enableWifi(band) {
+  return request('/api/wifi/enable', {
+    method: 'POST',
+    body: JSON.stringify({ band })
+  })
+}
+
+export async function disableWifi() {
+  return request('/api/wifi/disable', { method: 'POST' })
+}
+
+export async function setWifiBand(band) {
+  return request('/api/wifi/band', {
+    method: 'POST',
+    body: JSON.stringify({ band })
+  })
+}
+
+export async function getWifiClients() {
+  return request('/api/wifi/clients')
+}
+
+// 仅查询 OUI 前缀。maclookup.app 支持 JSONP，避免增加后端代理和设备端依赖。
+export function lookupMacVendor(oui) {
+  return new Promise((resolve, reject) => {
+    const callback = `__macVendor_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const script = document.createElement('script')
+    const timer = setTimeout(() => finish(new Error('厂商查询超时')), 5000)
+
+    function finish(error, data) {
+      clearTimeout(timer)
+      delete window[callback]
+      script.remove()
+      if (error) reject(error)
+      else resolve(data)
+    }
+
+    window[callback] = data => {
+      if (data?.success && data.found && data.company) finish(null, data)
+      else finish(new Error('未找到厂商'))
+    }
+    script.onerror = () => finish(new Error('厂商查询失败'))
+    script.src = `https://api.maclookup.app/v2/macs/${encodeURIComponent(oui)}?format=jsonp&callback=${callback}`
+    document.head.appendChild(script)
+  })
+}
+
+export async function getWifiBlacklist() {
+  return request('/api/wifi/blacklist')
+}
+
+export async function addToWifiBlacklist(mac) {
+  return request('/api/wifi/blacklist', {
+    method: 'POST',
+    body: JSON.stringify({ mac })
+  })
+}
+
+export async function removeFromWifiBlacklist(mac) {
+  return request('/api/wifi/blacklist/' + encodeURIComponent(mac), {
+    method: 'DELETE'
+  })
+}
+
+export async function clearWifiBlacklist() {
+  return request('/api/wifi/blacklist', { method: 'DELETE' })
+}
+
+export async function getWifiWhitelist() {
+  return request('/api/wifi/whitelist')
+}
+
+export async function addToWifiWhitelist(mac) {
+  return request('/api/wifi/whitelist', {
+    method: 'POST',
+    body: JSON.stringify({ mac })
+  })
+}
+
+export async function removeFromWifiWhitelist(mac) {
+  return request('/api/wifi/whitelist/' + encodeURIComponent(mac), {
+    method: 'DELETE'
+  })
+}
+
+export async function clearWifiWhitelist() {
+  return request('/api/wifi/whitelist', { method: 'DELETE' })
 }
 
 // ==================== 网络管理API ====================
@@ -370,6 +500,75 @@ export async function usbAdvanceSwitch(mode) {
     method: 'POST',
     body: JSON.stringify({ mode })
   })
+}
+
+// ==================== ADB管理API ====================
+
+export async function getAdbStatus() {
+  return request('/api/adb/status')
+}
+
+export async function setAdbWireless(enabled) {
+  return request('/api/adb/wireless', {
+    method: 'POST',
+    body: JSON.stringify({ enabled })
+  })
+}
+
+// ==================== 通知管理API ====================
+
+export async function getNotificationWebhook() {
+  return request('/api/notifications/webhook')
+}
+
+export async function saveNotificationWebhook(config) {
+  return request('/api/notifications/webhook', {
+    method: 'POST',
+    body: JSON.stringify(config)
+  })
+}
+
+export async function testNotificationWebhook() {
+  return request('/api/notifications/webhook/test', { method: 'POST' })
+}
+
+export async function getNotificationRules() {
+  return request('/api/notifications/rules')
+}
+
+export async function addNotificationRule(rule) {
+  return request('/api/notifications/rules', {
+    method: 'POST',
+    body: JSON.stringify(rule)
+  })
+}
+
+export async function updateNotificationRule(id, rule) {
+  return request(`/api/notifications/rules/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify(rule)
+  })
+}
+
+export async function deleteNotificationRule(id) {
+  return request(`/api/notifications/rules/${encodeURIComponent(id)}`, {
+    method: 'DELETE'
+  })
+}
+
+export async function getNotificationLogs(lines = 20) {
+  return request(`/api/notifications/logs?lines=${encodeURIComponent(lines)}`)
+}
+
+export async function setAdbUsb(enabled) {
+  return request('/api/adb/usb', {
+    method: 'POST',
+    body: JSON.stringify({ enabled })
+  })
+}
+
+export async function restartAdb() {
+  return request('/api/adb/restart', { method: 'POST' })
 }
 
 // ==================== APN配置API ====================

@@ -1,13 +1,16 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getChargeConfig, setChargeConfig, chargeOn, chargeOff } from '../composables/useApi'
 import { useToast } from '../composables/useToast'
 
 const { t } = useI18n()
 const { success, error: showError } = useToast()
+const capabilities = inject('capabilities', ref(null))
+const hasBattery = computed(() => capabilities.value?.power?.battery_supported !== false)
 
 const batteryStatus = ref({ level: 0, charging: false, health: '-', temperature: 0, voltage: 0, current: 0 })
+const firmwarePower = ref({ voltage: null, current: null, temperatureRaw: null, firmwareBattery: null, charging: null, status: '', source: '' })
 const chargeConfig = ref({ enabled: false, startLevel: 20, stopLevel: 80 })
 const saving = ref(false)
 const loading = ref(true)
@@ -71,10 +74,14 @@ async function fetchData() {
     const res = await getChargeConfig()
     if (res.Code === 0 && res.Data) {
       const { config, battery } = res.Data
-      chargeConfig.value = { enabled: config.enabled, startLevel: config.startThreshold, stopLevel: config.stopThreshold }
-      batteryStatus.value = {
-        level: battery.capacity, charging: battery.charging, health: battery.health || '-',
-        temperature: battery.temperature || 0, voltage: battery.voltage?.toFixed(2) || 0, current: Math.abs(battery.current || 0).toFixed(2)
+      if (config.supported) {
+        chargeConfig.value = { enabled: config.enabled, startLevel: config.startThreshold, stopLevel: config.stopThreshold }
+        batteryStatus.value = {
+          level: battery.capacity, charging: battery.charging, health: battery.health || '-',
+          temperature: battery.temperature || 0, voltage: battery.voltage?.toFixed(2) || 0, current: Math.abs(battery.current || 0).toFixed(2)
+        }
+      } else {
+        firmwarePower.value = battery
       }
     }
   } catch (error) { console.error('获取充电配置失败:', error) }
@@ -88,7 +95,36 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 
 <template>
   <div class="space-y-6">
-    <div v-if="loading" class="flex items-center justify-center py-20">
+    <div v-if="capabilities && !hasBattery" class="rounded-3xl bg-white/95 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 p-8 text-center">
+      <i class="fas fa-plug text-4xl text-blue-400 mb-4"></i>
+      <h2 class="text-xl font-bold text-slate-900 dark:text-white">外部供电设备</h2>
+      <p class="mt-2 text-slate-500 dark:text-white/50">当前设备没有内置电池，充电控制不适用。</p>
+      <div class="mt-5 grid grid-cols-2 gap-3 text-left" v-if="firmwarePower.source === 'fyapp'">
+        <div class="rounded-xl bg-slate-100 dark:bg-white/5 p-3">
+          <p class="text-xs text-slate-500 dark:text-white/50">固件电压</p>
+          <p class="font-semibold text-slate-900 dark:text-white">{{ firmwarePower.voltage ?? '--' }} V</p>
+        </div>
+        <div class="rounded-xl bg-slate-100 dark:bg-white/5 p-3">
+          <p class="text-xs text-slate-500 dark:text-white/50">固件电流</p>
+          <p class="font-semibold text-slate-900 dark:text-white">{{ firmwarePower.current ?? '--' }} A</p>
+        </div>
+        <div class="rounded-xl bg-slate-100 dark:bg-white/5 p-3">
+          <p class="text-xs text-slate-500 dark:text-white/50">固件温度原始值</p>
+          <p class="font-semibold text-slate-900 dark:text-white">{{ firmwarePower.temperatureRaw ?? '--' }}</p>
+        </div>
+        <div class="rounded-xl bg-slate-100 dark:bg-white/5 p-3">
+          <p class="text-xs text-slate-500 dark:text-white/50">固件电量字段</p>
+          <p class="font-semibold text-slate-900 dark:text-white">{{ firmwarePower.firmwareBattery ?? '--' }}</p>
+        </div>
+        <div class="rounded-xl bg-slate-100 dark:bg-white/5 p-3">
+          <p class="text-xs text-slate-500 dark:text-white/50">固件充电状态</p>
+          <p class="font-semibold text-slate-900 dark:text-white">{{ firmwarePower.status || '--' }}</p>
+        </div>
+      </div>
+      <p v-if="firmwarePower.source === 'fyapp'" class="mt-3 text-xs text-amber-500">以上是 fyapp 固件上报值，不代表内置电池或真实充电功率。</p>
+    </div>
+
+    <div v-else-if="loading" class="flex items-center justify-center py-20">
       <div class="relative">
         <div class="w-20 h-20 border-4 border-green-500/30 border-t-green-500 rounded-full animate-spin"></div>
         <div class="absolute inset-0 flex items-center justify-center"><i class="fas fa-battery-half text-green-400 text-2xl"></i></div>

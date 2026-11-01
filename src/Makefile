@@ -10,7 +10,7 @@ TARGET_GLIBC_DIR ?=
 # 添加 -DDISABLE_PRINTF 禁用所有printf输出
 # 添加 -DMG_ENABLE_IPV6=1 启用IPv6支持
 # IPv6端点和IPv4管理服务使用同一端口时，IPv6 socket必须只接收IPv6。
-CFLAGS = -Wall -O2 -g -DMG_ENABLE_LINES=0 -DMG_ENABLE_IPV6=1 -DMG_IPV6_V6ONLY=1 -include debug.h -DDISABLE_PRINTF
+CFLAGS = -Wall -O2 -g -DMG_ENABLE_LINES=0 -DMG_ENABLE_IPV6=1 -DMG_IPV6_V6ONLY=1 -include debug.h
 
 # GLib 库路径
 GLIB_DIR = ..
@@ -53,12 +53,16 @@ MAIN_SRCS = main.c mongoose.c packed_fs.c target_glibc_compat.c
 HANDLER_SRCS = handlers/http_server.c handlers/handlers.c
 SYSTEM_SRCS = system/sysinfo.c system/health.c system/modem.c system/airplane.c system/ofono.c \
               system/exec_utils.c system/advanced.c \
-              system/traffic.c system/reboot.c system/charge.c system/sms.c system/update.c \
+              system/traffic.c system/reboot.c system/charge.c system/sms.c system/sms_parser.c system/update.c \
               system/usb_mode.c system/plugin.c system/plugin_storage.c \
               system/sha256.c system/auth.c system/database.c system/apn.c system/json_builder.c \
               system/netif.c system/rathole.c system/phone_case.c system/ipv6_proxy.c system/security.c \
-              system/builtin_card_rules.c system/strict_json.c system/goform_client.c \
-              system/goform_async.c system/builtin_cards.c \
+              system/device_profile.c system/led.c system/power_key.c system/wifi.c \
+              system/factory_reset.c system/builtin_card_rules.c system/strict_json.c \
+              system/goform_client.c system/goform_async.c system/builtin_cards.c \
+              system/wifi_clients.c \
+              system/notification_rules.c system/notification.c system/notification_monitor.c \
+              system/telemetry.c system/telemetry_codec.c \
               system/goform_proxy.c
 SRCS = $(MAIN_SRCS) $(HANDLER_SRCS) $(SYSTEM_SRCS)
 OBJS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mongoose.o $(BUILD_DIR)/packed_fs.o \
@@ -67,13 +71,19 @@ OBJS = $(BUILD_DIR)/main.o $(BUILD_DIR)/mongoose.o $(BUILD_DIR)/packed_fs.o \
        $(BUILD_DIR)/sysinfo.o $(BUILD_DIR)/health.o $(BUILD_DIR)/modem.o $(BUILD_DIR)/airplane.o \
        $(BUILD_DIR)/ofono.o $(BUILD_DIR)/exec_utils.o \
        $(BUILD_DIR)/advanced.o $(BUILD_DIR)/traffic.o $(BUILD_DIR)/reboot.o \
-       $(BUILD_DIR)/charge.o $(BUILD_DIR)/sms.o $(BUILD_DIR)/update.o $(BUILD_DIR)/usb_mode.o \
+       $(BUILD_DIR)/charge.o $(BUILD_DIR)/sms.o $(BUILD_DIR)/sms_parser.o $(BUILD_DIR)/update.o $(BUILD_DIR)/usb_mode.o \
        $(BUILD_DIR)/plugin.o $(BUILD_DIR)/plugin_storage.o \
        $(BUILD_DIR)/sha256.o $(BUILD_DIR)/auth.o $(BUILD_DIR)/database.o $(BUILD_DIR)/apn.o \
        $(BUILD_DIR)/json_builder.o $(BUILD_DIR)/netif.o $(BUILD_DIR)/rathole.o $(BUILD_DIR)/phone_case.o \
        $(BUILD_DIR)/ipv6_proxy.o $(BUILD_DIR)/security.o \
+       $(BUILD_DIR)/device_profile.o $(BUILD_DIR)/led.o $(BUILD_DIR)/power_key.o \
+       $(BUILD_DIR)/wifi.o $(BUILD_DIR)/factory_reset.o \
        $(BUILD_DIR)/builtin_card_rules.o $(BUILD_DIR)/strict_json.o \
        $(BUILD_DIR)/goform_client.o $(BUILD_DIR)/goform_async.o $(BUILD_DIR)/builtin_cards.o \
+       $(BUILD_DIR)/wifi_clients.o \
+       $(BUILD_DIR)/notification_rules.o $(BUILD_DIR)/notification.o \
+       $(BUILD_DIR)/notification_monitor.o \
+       $(BUILD_DIR)/telemetry.o $(BUILD_DIR)/telemetry_codec.o \
        $(BUILD_DIR)/goform_proxy.o
 
 .PHONY: all clean
@@ -179,6 +189,42 @@ $(BUILD_DIR)/ipv6_proxy.o: system/ipv6_proxy.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
 $(BUILD_DIR)/security.o: system/security.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+$(BUILD_DIR)/device_profile.o: system/device_profile.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+$(BUILD_DIR)/led.o: system/led.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+$(BUILD_DIR)/power_key.o: system/power_key.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+$(BUILD_DIR)/wifi.o: system/wifi.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+$(BUILD_DIR)/factory_reset.o: system/factory_reset.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+$(BUILD_DIR)/wifi_clients.o: system/wifi_clients.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+$(BUILD_DIR)/notification_rules.o: system/notification_rules.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+$(BUILD_DIR)/notification.o: system/notification.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+$(BUILD_DIR)/notification_monitor.o: system/notification_monitor.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+$(BUILD_DIR)/telemetry.o: system/telemetry.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+$(BUILD_DIR)/telemetry_codec.o: system/telemetry_codec.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+
+$(BUILD_DIR)/sms_parser.o: system/sms_parser.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
 $(BUILD_DIR)/builtin_card_rules.o: system/builtin_card_rules.c | $(BUILD_DIR)

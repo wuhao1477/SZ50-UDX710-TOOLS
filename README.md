@@ -8,23 +8,34 @@ A web-based management interface for 5G MiFi devices running on embedded Linux s
 
 ## 📦 Versions
 
-This project provides two versions for different devices:
+This repository only does secondary development for the **SZ50** device, and every capability now lives on the single `main` branch.
 
-| Version | Target Device | Git Branch | Features | Description |
-|:---:|:---:|:---:|:---:|:---|
-| **UDX710 Generic** | UNISOC UDX710 Platform | `main` | ⭐ Basic Features | For most UDX710 devices |
-| **SZ50 Dedicated** | SZ50 MiFi Device | `SZ50` | 🌟 Full Features | Extra: LED Control, Key Listener, WiFi Control, Factory Reset, Client Management |
+| Version | Target Device | Git Branch | Features |
+|:---:|:---:|:---:|:---|
+| **SZ50 Dedicated** | SZ50 MiFi (UDX710 `marlin3e`) | `main` | 🌟 Full: LED control, key listener, WiFi control, factory reset, client management, notifications, ADB management, telemetry upload, builtin-card carrier switching |
 
-> 💡 **Switch Version**: `git checkout SZ50` for SZ50 version, `git checkout main` for generic version
+> 💡 The former `sz50`, `feature/realtime-device-health`, `feat/restore-builtin-card-operator` and `auto/fix-ipv6-listener-20260908` branches are all merged into `main` and no longer maintained separately.
+
+### Current device profile
+
+This branch targets the externally powered router-shaped UDX710 `marlin3e` device:
+
+- No internal battery; charging controls report as unsupported and the UI shows external power.
+- WiFi is detected from hostapd at runtime; the current device uses `wlan1` and `/mnt/data/hostapd_wlan1.conf`.
+- Cellular data uses `sipa_eth0` when available.
+- Type-C currently exposes vendor RNDIS + ADB + serial functions (`0x2dee:0x4d51`); the dashboard reports the mode but does not attempt generic USB switching.
+- RJ45 hardware is present, while the current firmware does not expose `eth0` or `/dev/seth_lte`; the dashboard distinguishes physical presence from usable networking.
+- `tools/start.sh` starts the server with `start-stop-daemon`; `tools/rj45_bridge_watch.sh` bridges a future `eth*`/`en*`/`lan*` interface when the device exposes one.
+
+The complete capability matrix is in [`tools/device-capabilities.md`](tools/device-capabilities.md).
 
 ### 📥 Download
 
 | Version | Download |
 |:---:|:---:|
-| **UDX710 Generic** | [📥 Download](https://github.com/LeoChen-CoreMind/UDX710-TOOLS/releases/latest) |
-| **SZ50 Dedicated** | [📥 Download](https://github.com/LeoChen-CoreMind/UDX710-TOOLS/releases/latest) |
+| **SZ50 Dedicated** | [📥 Download](https://github.com/wuhao1477/UDX710-TOOLS/releases/latest) |
 
-### SZ50 Dedicated Version Extra Features
+### SZ50 Adaptation Features
 - 🔆 **LED Control** - Customize LED indicator status
 - 🔘 **Key Listener** - Physical button event response
 - 📶 **WiFi Control** - Full WiFi AP management
@@ -227,10 +238,19 @@ The backend uses cross-compilation targeting aarch64-linux-gnu. Ensure your tool
 | `/api/rathole/services` | GET/POST/DELETE | Rathole service management |
 | `/api/rathole/status` | GET | Rathole connection status |
 | `/api/rathole/logs` | GET | Rathole logs |
+| `/api/telemetry/config` | GET/POST | Log and telemetry upload configuration |
+| `/api/telemetry/status` | GET | Log and telemetry upload status |
+| `/api/telemetry/test` | POST | Test telemetry receiver |
 | `/api/update/check` | GET | Check for updates |
 | `/api/update/install` | POST | Install update |
 | `/api/factory-reset` | POST | Factory reset |
 | `/api/reboot` | POST | Reboot device |
+
+### Log and telemetry upload
+
+Uploading is disabled by default. Configure a complete receiver URL, group Token, and a 10–3600 second snapshot interval in System Settings. The device sends system parameters, runtime status, traffic, and logs; passwords, credentials, Tokens, and SMS bodies are excluded. No offline queue is kept on the device, so failed fragments are discarded.
+
+The System Update local-file mode uses `udx710-tools-update.zip` from the cloud build artifact. It contains `install.sh`, replaces the server and frontend files, and preserves `6677.db`, plugins, and other data.
 
 ## Dependencies
 

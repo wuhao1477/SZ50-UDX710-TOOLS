@@ -9,6 +9,7 @@
  */
 
 #include "ofono.h"
+#include "telemetry.h"
 #include "dbus_core.h"
 #include "sysinfo.h"
 #include <pthread.h>
@@ -51,6 +52,16 @@ static const char *get_current_modem_path(void) {
     g_modem_path[sizeof(g_modem_path) - 1] = '\0';
   }
   return g_modem_path;
+}
+
+int ofono_get_current_modem_path(char *path, size_t size) {
+  const char *current;
+  if (!path || size == 0) {
+    return -1;
+  }
+  current = get_current_modem_path();
+  snprintf(path, size, "%s", current);
+  return path[0] ? 0 : -1;
 }
 
 /* 设置错误信息 */
@@ -275,6 +286,7 @@ int execute_at(const char *command, char **result) {
     break;
   }
 
+  telemetry_capture_at(command, *result ? *result : dbus_get_last_error(), rc == 0);
   pthread_mutex_unlock(&g_at_mutex);
   return rc;
 }

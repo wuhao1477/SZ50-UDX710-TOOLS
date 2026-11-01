@@ -10,11 +10,14 @@
 #include "builtin_cards.h"
 #include "charge.h"
 #include "dbus_core.h"
+#include "factory_reset.h"
 #include "goform_client.h"
 #include "goform_proxy.h"
 #include "handlers.h"
 #include "http_utils.h"
 #include "mongoose.h"
+#include "notification.h"
+#include "led.h"
 #include "netif.h"
 #include "reboot.h"
 #include "sms.h"
@@ -23,6 +26,7 @@
 #include "system/rathole.h"
 #include "system/security.h"
 #include "traffic.h"
+#include "telemetry.h"
 #include "usb_mode.h"
 #include <glib.h>
 #include <signal.h>
@@ -79,6 +83,8 @@ static int is_auth_whitelist(const char *uri, const char *method,
     if (strncmp(uri, "/api/charge/config", 18) == 0)
       return 1;
     if (strncmp(uri, "/api/current_band", 17) == 0)
+      return 1;
+    if (strncmp(uri, "/api/capabilities", 17) == 0)
       return 1;
   }
 
@@ -182,7 +188,13 @@ static void http_handler(struct mg_connection *c, int ev, void *ev_data) {
     }
 
     /* API 路由 */
-    if (mg_match(hm->uri, mg_str("/api/info"), NULL)) {
+    if (mg_match(hm->uri, mg_str("/api/telemetry/config"), NULL)) {
+      handle_telemetry_config(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/telemetry/status"), NULL)) {
+      handle_telemetry_status(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/telemetry/test"), NULL)) {
+      handle_telemetry_test(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/info"), NULL)) {
       handle_info(c, hm);
     } else if (mg_match(hm->uri, mg_str("/api/health"), NULL)) {
       handle_health(c, hm);
@@ -200,6 +212,8 @@ static void http_handler(struct mg_connection *c, int ev, void *ev_data) {
       handle_clear_cache(c, hm);
     } else if (mg_match(hm->uri, mg_str("/api/current_band"), NULL)) {
       handle_get_current_band(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/capabilities"), NULL)) {
+      handle_capabilities(c, hm);
     } else if (mg_match(hm->uri, mg_str("/api/goform/proxy"), NULL)) {
       handle_goform_proxy(c, hm);
     } else if (mg_match(hm->uri, mg_str("/api/builtin-cards/realname"),
@@ -288,6 +302,55 @@ static void http_handler(struct mg_connection *c, int ev, void *ev_data) {
     } else if (mg_match(hm->uri, mg_str("/api/sms/*"), NULL)) {
       handle_sms_delete(c, hm);
     }
+    /* 通知管理 API；Webhook旧短信路径继续复用同一处理器 */
+    else if (mg_match(hm->uri, mg_str("/api/notifications/webhook"), NULL)) {
+      if (hm->method.len == 3 && memcmp(hm->method.buf, "GET", 3) == 0) {
+        handle_sms_webhook_get(c, hm);
+      } else {
+        handle_sms_webhook_save(c, hm);
+      }
+    } else if (mg_match(hm->uri,
+                       mg_str("/api/notifications/webhook/test"), NULL)) {
+      handle_sms_webhook_test(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/notifications/logs"), NULL)) {
+      handle_sms_webhook_logs(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/notifications/rules"), NULL)) {
+      handle_notification_rules(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/notifications/rules/*"), NULL)) {
+      handle_notification_rule_item(c, hm);
+    }
+    /* LED 控制 API */
+    else if (mg_match(hm->uri, mg_str("/api/led/status"), NULL)) {
+      handle_led_status(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/led/control"), NULL)) {
+      handle_led_control(c, hm);
+    }
+    /* WiFi 控制 API */
+    else if (mg_match(hm->uri, mg_str("/api/wifi/status"), NULL)) {
+      handle_wifi_status(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/wifi/config"), NULL)) {
+      handle_wifi_config(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/wifi/enable"), NULL)) {
+      handle_wifi_enable(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/wifi/disable"), NULL)) {
+      handle_wifi_disable(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/wifi/band"), NULL)) {
+      handle_wifi_band(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/wifi/clients"), NULL)) {
+      handle_wifi_clients(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/wifi/blacklist/*"), NULL)) {
+      handle_wifi_blacklist(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/wifi/blacklist"), NULL)) {
+      handle_wifi_blacklist(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/wifi/whitelist/*"), NULL)) {
+      handle_wifi_whitelist(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/wifi/whitelist"), NULL)) {
+      handle_wifi_whitelist(c, hm);
+    }
+    /* 恢复出厂设置 API */
+    else if (mg_match(hm->uri, mg_str("/api/factory-reset"), NULL)) {
+      handle_factory_reset(c, hm);
+    }
     /* OTA更新 API */
     else if (mg_match(hm->uri, mg_str("/api/update/version"), NULL)) {
       handle_update_version(c, hm);
@@ -311,6 +374,16 @@ static void http_handler(struct mg_connection *c, int ev, void *ev_data) {
       }
     } else if (mg_match(hm->uri, mg_str("/api/usb-advance"), NULL)) {
       handle_usb_advance(c, hm);
+    }
+    /* ADB 管理 API */
+    else if (mg_match(hm->uri, mg_str("/api/adb/status"), NULL)) {
+      handle_adb_status(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/adb/wireless"), NULL)) {
+      handle_adb_wireless(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/adb/usb"), NULL)) {
+      handle_adb_usb(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/adb/restart"), NULL)) {
+      handle_adb_restart(c, hm);
     }
     /* 数据连接和漫游 API */
     else if (mg_match(hm->uri, mg_str("/api/data"), NULL)) {
@@ -508,6 +581,9 @@ int http_server_start(const char *port) {
   init_charge();
 
   /* 初始化短信模块（必须在auth_init之前，因为auth依赖数据库） */
+  if (notification_init("6677.db") != 0) {
+    printf("警告: 通知管理模块初始化失败\n");
+  }
   if (sms_init("6677.db") != 0) {
     printf("警告: 短信模块初始化失败\n");
   }
@@ -538,6 +614,10 @@ int http_server_start(const char *port) {
   /* 初始化密保模块 */
   if (security_init() != 0) {
     printf("警告: 密保模块初始化失败\n");
+  }
+
+  if (telemetry_init("6677.db") != 0) {
+    printf("警告: 遥测上传模块初始化失败\n");
   }
 
   /* 初始化 mongoose */
@@ -582,8 +662,11 @@ int http_server_start(const char *port) {
 
 void http_server_stop(void) {
   g_running = 0;
-  /* Release proxy children and the native IPv6 management firewall rule. */
+  /* Release proxy children, telemetry/notification state and the native
+   * IPv6 management firewall rule. */
   http_server_cleanup();
+  telemetry_deinit();
+  notification_deinit();
   printf("服务器已停止\n");
 }
 
@@ -604,6 +687,7 @@ void http_server_run(void) {
     if (++maintenance_counter >= 3000) { /* 3000 * 10ms = 30秒 */
       maintenance_counter = 0;
       sms_maintenance();
+      notification_maintenance();
     }
   }
 }

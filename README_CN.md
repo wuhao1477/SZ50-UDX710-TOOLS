@@ -6,23 +6,34 @@
 
 ## 📦 版本说明
 
-本项目提供两个版本，满足不同设备需求：
+本仓库只面向 **SZ50** 做二次开发适配，所有能力都收敛在唯一的 `main` 分支上。
 
-| 版本类型 | 适用设备 | Git分支 | 功能支持 | 说明 |
-|:---:|:---:|:---:|:---:|:---|
-| **UDX710 通用版** | 展锐UDX710平台通用 | `main` | ⭐ 基础功能集 | 适用于大多数UDX710设备 |
-| **SZ50 专用版** | SZ50随身WiFi | `SZ50` | 🌟 全功能支持 | 额外支持：LED灯控制、按键监听、WiFi控制、恢复出厂设置、设备接入管理 |
+| 版本类型 | 适用设备 | Git分支 | 功能支持 |
+|:---:|:---:|:---:|:---|
+| **SZ50 专用版** | SZ50 随身WiFi（UDX710 `marlin3e`） | `main` | 🌟 全功能：LED灯控制、按键监听、WiFi控制、恢复出厂设置、设备接入管理、通知管理、ADB管理、遥测上传、内置卡运营商切换 |
 
-> 💡 **切换版本**: `git checkout SZ50` 切换到SZ50专用版，`git checkout main` 切换到通用版
+> 💡 历史上的 `sz50`、`feature/realtime-device-health`、`feat/restore-builtin-card-operator`、`auto/fix-ipv6-listener-20260908` 等分支已全部合并进 `main`，不再单独维护。
+
+### 当前设备适配
+
+本分支面向外部供电、路由器形态的 UDX710 `marlin3e` 设备：
+
+- 没有内置电池；充电接口返回不适用，页面显示外部供电。
+- WiFi 从 hostapd 运行状态动态识别；当前设备使用 `wlan1` 和 `/mnt/data/hostapd_wlan1.conf`。
+- 蜂窝数据接口优先使用 `sipa_eth0`。
+- Type-C 当前为厂商 RNDIS + ADB + 串口组合（`0x2dee:0x4d51`）；页面显示状态，不执行通用 USB 模式切换。
+- RJ45 物理接口存在，但当前固件没有 `eth0` 或 `/dev/seth_lte`，页面会区分“物理存在”和“系统侧可用”。
+- `tools/start.sh` 使用 `start-stop-daemon` 启动服务；`tools/rj45_bridge_watch.sh` 会在系统出现 `eth*`、`en*` 或 `lan*` 接口后加入 `tether` 网桥。
+
+完整能力说明见 [`tools/device-capabilities.md`](tools/device-capabilities.md)。
 
 ### 📥 软件下载
 
 | 版本 | 下载链接 |
 |:---:|:---:|
-| **UDX710 通用版** | [📥 点击下载](https://github.com/LeoChen-CoreMind/UDX710-UOOLS/releases/latest) |
-| **SZ50 专用版** | [📥 点击下载](https://github.com/LeoChen-CoreMind/UDX710-UOOLS/releases/latest) |
+| **SZ50 专用版** | [📥 点击下载](https://github.com/wuhao1477/UDX710-TOOLS/releases/latest) |
 
-### SZ50专用版额外功能
+### SZ50 适配功能
 - 🔆 **LED灯控制** - 自定义LED指示灯状态
 - 🔘 **按键监听** - 物理按键事件响应
 - 📶 **WiFi控制** - 完整的WiFi AP管理
@@ -225,10 +236,19 @@ make
 | `/api/rathole/services` | GET/POST/DELETE | Rathole服务管理 |
 | `/api/rathole/status` | GET | Rathole连接状态 |
 | `/api/rathole/logs` | GET | Rathole日志 |
+| `/api/telemetry/config` | GET/POST | 日志与遥测上传配置 |
+| `/api/telemetry/status` | GET | 日志与遥测上传状态 |
+| `/api/telemetry/test` | POST | 测试遥测接收端 |
 | `/api/update/check` | GET | 检查更新 |
 | `/api/update/install` | POST | 安装更新 |
 | `/api/factory-reset` | POST | 恢复出厂设置 |
 | `/api/reboot` | POST | 重启设备 |
+
+### 日志与遥测上传
+
+上传默认关闭。在系统设置中配置完整接收 URL、分组 Token 和 10–3600 秒的快照周期后，设备会上传系统参数、运行状态、流量和日志。密码、认证凭据、Token 及短信正文不会上传。设备不保存断网队列，失败分片直接丢弃。
+
+系统更新页的本地文件模式使用云构建产物中的 `udx710-tools-update.zip`。该包包含 `install.sh`，会替换服务程序和前端文件，保留 `6677.db`、插件及其他数据。
 
 ## 依赖库
 
