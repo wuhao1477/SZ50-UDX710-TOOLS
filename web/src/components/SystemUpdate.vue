@@ -108,9 +108,9 @@ async function checkUpdate() {
       latestVersion.value = data.latest_version
       updateAvailable.value = true
       updateUrl.value = data.url || ''
-      addLog(t('update.foundNewVersion') + ': v' + data.latest_version)
+      addLog(t('update.foundNewVersion') + ': ' + formatVersion(data.latest_version))
       if (data.changelog) addLog(t('update.updateContent') + ': ' + data.changelog)
-      success(t('update.foundNewVersion') + ' v' + data.latest_version)
+      success(t('update.foundNewVersion') + ' ' + formatVersion(data.latest_version))
     } else {
       latestVersion.value = data.current_version
       updateAvailable.value = false
@@ -204,6 +204,13 @@ async function startUpdate() {
     installing.value = false
     clearFile()
   }
+}
+
+function formatVersion(version) {
+  // version.json 里的 version 可能带也可能不带 v 前缀，统一按 vX.Y.Z 展示，避免出现 "vv2.4.9"
+  const text = String(version ?? '').trim()
+  if (!text) return ''
+  return /^[vV]/.test(text) ? 'v' + text.slice(1) : 'v' + text
 }
 
 function addLog(message) {

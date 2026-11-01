@@ -24,6 +24,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 static int extract_json_string(const char *json, const char *key, char *value,
                                size_t value_size) {
@@ -1596,32 +1598,66 @@ void handle_update_extract(struct mg_connection *c,
   }
 }
 
-/* POST /api/update/install - 执行安装并重启 */
+/* POST /api/update/install - 执行安装并重启
+ *
+ * 不能同步执行 update_install()：install.sh 会停掉并替换当前 server 进程本身
+ * （/tmp/udx710-tools.pid 指向的就是正在处理本请求的进程），进程会在应答写出前被
+ * kill，客户端只能收到 "Empty reply from server"，后面的 device_reboot() 也永远
+ * 执行不到（表现为「文件已更新但设备不重启、页面报更新失败」）。
+ *
+ * 正确顺序：先把应答交给事件循环发出去，再由一个脱离会话的子进程延迟执行安装脚本
+ * 并重启设备。子进程在 2s 后才动作，足够父进程完成 mg_mgr_poll 的发送。 */
 void handle_update_install(struct mg_connection *c,
                            struct mg_http_message *hm) {
   HTTP_CHECK_POST(c, hm);
 
-  char output[2048] = {0};
-
-  if (update_install(output, sizeof(output)) == 0) {
-    JsonBuilder *j = json_new();
-    json_obj_open(j);
-    json_add_str(j, "status", "success");
-    json_add_str(j, "message", "安装成功，正在重启...");
-    json_add_str(j, "output", output);
-    json_obj_close(j);
-    HTTP_OK_FREE(c, json_finish(j));
-    c->is_draining = 1;
-    sleep(2);
-    device_reboot();
-  } else {
+  struct stat st;
+  if (stat(UPDATE_INSTALL_SCRIPT, &st) != 0) {
     JsonBuilder *j = json_new();
     json_obj_open(j);
     json_add_str(j, "error", "安装失败");
-    json_add_str(j, "output", output);
+    json_add_str(j, "output", "安装脚本不存在，请先下载并解压更新包");
     json_obj_close(j);
     HTTP_JSON_FREE(c, 500, json_finish(j));
+    return;
   }
+
+  pid_t pid = fork();
+  if (pid < 0) {
+    JsonBuilder *j = json_new();
+    json_obj_open(j);
+    json_add_str(j, "error", "安装失败");
+    json_add_str(j, "output", "无法创建安装进程");
+    json_obj_close(j);
+    HTTP_JSON_FREE(c, 500, json_finish(j));
+    return;
+  }
+
+  if (pid == 0) {
+    /* 子进程：脱离会话后延迟执行，避免被 install.sh 停旧进程时连带杀掉 */
+    setsid();
+    execl("/bin/sh", "sh", "-c",
+          "sleep 2; sh " UPDATE_INSTALL_SCRIPT "; sync; reboot", (char *)NULL);
+    _exit(127);
+  }
+
+  JsonBuilder *j = json_new();
+  json_obj_open(j);
+  json_add_str(j, "status", "success");
+  json_add_str(j, "message", "安装成功，正在重启...");
+  json_obj_close(j);
+  HTTP_OK_FREE(c, json_finish(j));
+  c->is_draining = 1;
+}
+
+/* 版本号比较：忽略前导 v/V。
+ * tag 注入的版本串形如 "v2.4.9"，而 version.json 里的 version 可能带也可能不带前缀；
+ * 直接 strcmp 会把 "2.4.9" 判成小于 "v2.4.8"（'2' < 'v'），永远检测不到更新。 */
+static int version_is_newer(const char *latest, const char *current) {
+  if (!latest || !current) return 0;
+  while (*latest == 'v' || *latest == 'V') latest++;
+  while (*current == 'v' || *current == 'V') current++;
+  return strcmp(latest, current) > 0;
 }
 
 /* GET /api/update/check - 检查远程版本 */
@@ -1633,7 +1669,7 @@ void handle_update_check(struct mg_connection *c, struct mg_http_message *hm) {
   update_info_t info;
   if (update_check_version(check_url, &info) == 0) {
     const char *current = update_get_version();
-    int has_update = strcmp(info.version, current) > 0 ? 1 : 0;
+    int has_update = version_is_newer(info.version, current);
 
     JsonBuilder *j = json_new();
     json_obj_open(j);
