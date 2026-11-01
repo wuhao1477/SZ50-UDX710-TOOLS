@@ -25,7 +25,7 @@ import GlobalConfirm from './components/GlobalConfirm.vue'
 import UpdateNotification from './components/UpdateNotification.vue'
 import SecuritySetup from './components/SecuritySetup.vue'
 import ForgotPasswordModal from './components/ForgotPasswordModal.vue'
-import { isLoggedIn, authGetStatus, clearAuthToken, authLogin, getSecurityStatus, getCapabilities } from './composables/useApi'
+import { isLoggedIn, authGetStatus, clearAuthToken, authLogin, getSecurityStatus, getCapabilities, getToolsVersion } from './composables/useApi'
 import { useToast } from './composables/useToast'
 
 // i18n
@@ -282,9 +282,32 @@ const capabilities = ref(null)
 const loading = ref(false)
 const lastUpdate = ref('')
 
+// 当前部署版本（来自 /api/version，构建时由 CI 注入 git tag）
+const toolsVersion = ref('')
+const toolsCommit = ref('')
+const versionTooltip = computed(() => {
+  if (!toolsVersion.value) return ''
+  return toolsCommit.value
+    ? `${toolsVersion.value} (${toolsCommit.value})`
+    : toolsVersion.value
+})
+
 provide('systemInfo', systemInfo)
 provide('capabilities', capabilities)
 provide('loading', loading)
+provide('toolsVersion', toolsVersion)
+
+async function fetchToolsVersion() {
+  try {
+    const res = await getToolsVersion()
+    if (res && res.ok && res.data) {
+      toolsVersion.value = res.data.version || ''
+      toolsCommit.value = res.data.commit || ''
+    }
+  } catch (error) {
+    console.error('获取版本信息失败:', error)
+  }
+}
 
 async function fetchCapabilities() {
   try {
@@ -371,7 +394,10 @@ onMounted(async () => {
   initTheme()
   // 监听401事件
   window.addEventListener('auth-required', handleAuthRequired)
-  
+
+  // 版本信息（无需登录，便于部署后立刻确认版本）
+  fetchToolsVersion()
+
   // 检查登录状态
   await checkAuthStatus()
   
@@ -516,6 +542,9 @@ onUnmounted(() => {
                   <font-awesome-icon icon="shield-alt" class="mr-1" />
                   {{ t('auth.loginToContinue') }}
                 </p>
+                <p class="text-center text-slate-400 dark:text-white/30 text-xs mt-2 font-mono" :title="versionTooltip">
+                  {{ t('update.currentVersion') }}: {{ toolsVersion || '...' }}
+                </p>
               </div>
             </div>
           </div>
@@ -593,6 +622,25 @@ onUnmounted(() => {
           </button>
         </nav>
 
+        <!-- 当前版本 -->
+        <div class="px-2 md:px-4 pb-1">
+          <div
+            class="w-full rounded-xl bg-slate-100/80 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 flex items-center p-2 md:p-3"
+            :class="(sidebarCollapsed && !isMobile) ? 'justify-center' : 'space-x-3'"
+            :title="versionTooltip"
+          >
+            <div class="w-9 h-9 md:w-10 md:h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-emerald-500 to-teal-400 shadow-lg shadow-emerald-500/20">
+              <font-awesome-icon icon="tag" class="text-white text-sm" />
+            </div>
+            <div v-show="!sidebarCollapsed || isMobile" class="min-w-0">
+              <div class="text-slate-500 dark:text-white/40 text-[10px] md:text-xs leading-none">{{ t('update.currentVersion') }}</div>
+              <div class="text-slate-800 dark:text-white/80 text-sm md:text-base font-mono font-medium truncate">
+                {{ toolsVersion || '...' }}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- GitHub链接 -->
         <div class="px-2 md:px-4 pb-2">
           <a 
@@ -653,6 +701,16 @@ onUnmounted(() => {
             </div>
             <!-- 右侧：状态信息 -->
             <div class="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
+              <!-- 当前版本 -->
+              <div
+                class="hidden sm:flex items-center space-x-1.5 px-2 md:px-3 py-1.5 md:py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg md:rounded-xl"
+                :title="versionTooltip"
+              >
+                <font-awesome-icon icon="tag" class="text-emerald-500 dark:text-emerald-400 text-xs" />
+                <span class="text-emerald-600 dark:text-emerald-400 text-xs md:text-sm font-mono font-medium">
+                  {{ toolsVersion || '...' }}
+                </span>
+              </div>
               <!-- 状态指示器 -->
               <div class="flex items-center space-x-1.5 md:space-x-2 px-2 md:px-4 py-1.5 md:py-2 bg-slate-200 dark:bg-white/5 rounded-lg md:rounded-xl">
                 <span class="w-2 h-2 rounded-full animate-pulse" :class="loading ? 'bg-yellow-400' : 'bg-green-400'"></span>

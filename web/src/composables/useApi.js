@@ -179,6 +179,13 @@ export async function getCapabilities() {
   return request('/api/capabilities')
 }
 
+// ==================== 版本信息 API ====================
+
+// 当前部署版本（构建时由 CI 注入 git tag，无需登录）
+export async function getToolsVersion() {
+  return request('/api/version')
+}
+
 // ==================== WiFi API ====================
 
 export async function getWifiStatus() {

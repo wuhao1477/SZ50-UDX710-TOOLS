@@ -18,6 +18,11 @@ const char* update_get_version(void) {
     return FIRMWARE_VERSION;
 }
 
+/* 获取构建提交号 */
+const char* update_get_build_commit(void) {
+    return UDX710_TOOLS_COMMIT;
+}
+
 /* 从URL下载更新包 */
 int update_download(const char *url) {
     char output[1024];

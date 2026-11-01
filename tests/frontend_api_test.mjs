@@ -36,3 +36,6 @@ assert.equal(typeof api.addNotificationRule, 'function')
 assert.equal(typeof api.updateNotificationRule, 'function')
 assert.equal(typeof api.deleteNotificationRule, 'function')
 assert.equal(typeof api.getNotificationLogs, 'function')
+
+// 版本信息
+assert.equal(typeof api.getToolsVersion, 'function')

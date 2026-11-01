@@ -86,6 +86,8 @@ static int is_auth_whitelist(const char *uri, const char *method,
       return 1;
     if (strncmp(uri, "/api/capabilities", 17) == 0)
       return 1;
+    if (strncmp(uri, "/api/version", 12) == 0)
+      return 1;
   }
 
   /* 设备控制API - POST和OPTIONS请求无需认证（OPTIONS用于CORS预检） */
@@ -196,6 +198,8 @@ static void http_handler(struct mg_connection *c, int ev, void *ev_data) {
       handle_telemetry_test(c, hm);
     } else if (mg_match(hm->uri, mg_str("/api/info"), NULL)) {
       handle_info(c, hm);
+    } else if (mg_match(hm->uri, mg_str("/api/version"), NULL)) {
+      handle_version(c, hm);
     } else if (mg_match(hm->uri, mg_str("/api/health"), NULL)) {
       handle_health(c, hm);
     } else if (mg_match(hm->uri, mg_str("/api/at"), NULL)) {

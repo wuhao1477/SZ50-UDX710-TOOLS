@@ -232,7 +232,7 @@ onMounted(() => {
           <h3 class="text-slate-900 dark:text-white font-semibold text-sm sm:text-base">{{ $t('update.title') }}</h3>
           <p class="text-slate-500 dark:text-white/50 text-xs sm:text-sm">
             {{ $t('update.currentVersion') }}: 
-            <span v-if="currentVersion" class="font-mono text-emerald-600 dark:text-emerald-400">v{{ currentVersion }}</span>
+            <span v-if="currentVersion" class="font-mono text-emerald-600 dark:text-emerald-400">{{ currentVersion }}</span>
             <span v-else class="text-slate-400 dark:text-white/30">{{ $t('common.loading') || '加载中...' }}</span>
           </p>
         </div>

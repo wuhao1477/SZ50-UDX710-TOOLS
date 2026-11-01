@@ -6,11 +6,23 @@ CC = aarch64-linux-gnu-gcc
 #   make TARGET_GLIBC_DIR=/path/to/target-glibc
 TARGET_GLIBC_DIR ?=
 
+# 版本号：CI 对 tag 构建注入 VERSION（如 v2.4.5）；未注入时回退到 git describe（tag 或短提交号）。
+# 前端与 /api/version 都原样展示该字符串，保证"设备上显示的版本 = 发布 tag"。
+VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo v2.4.5)
+ifeq ($(strip $(VERSION)),)
+VERSION := $(shell git describe --tags --always 2>/dev/null || echo v2.4.5)
+endif
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+ifeq ($(strip $(COMMIT)),)
+COMMIT := unknown
+endif
+VERSION_DEFS = -DUDX710_TOOLS_VERSION='"$(VERSION)"' -DUDX710_TOOLS_COMMIT='"$(COMMIT)"'
+
 # 移除 -DDISABLE_PRINTF 以启用调试输出
 # 添加 -DDISABLE_PRINTF 禁用所有printf输出
 # 添加 -DMG_ENABLE_IPV6=1 启用IPv6支持
 # IPv6端点和IPv4管理服务使用同一端口时，IPv6 socket必须只接收IPv6。
-CFLAGS = -Wall -O2 -g -DMG_ENABLE_LINES=0 -DMG_ENABLE_IPV6=1 -DMG_IPV6_V6ONLY=1 -include debug.h
+CFLAGS = -Wall -O2 -g -DMG_ENABLE_LINES=0 -DMG_ENABLE_IPV6=1 -DMG_IPV6_V6ONLY=1 -include debug.h $(VERSION_DEFS)
 
 # GLib 库路径
 GLIB_DIR = ..

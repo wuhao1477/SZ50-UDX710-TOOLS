@@ -3,9 +3,15 @@ set -eu
 
 # 认证与基础 API
 for route in /api/auth/login /api/apn/config /api/plugins /api/rathole/status \
-  /api/ipv6-proxy/status /api/netif/list /api/usb/mode /api/info /api/health; do
+  /api/ipv6-proxy/status /api/netif/list /api/usb/mode /api/info /api/health \
+  /api/version; do
   grep -q "\"$route\"" src/handlers/http_server.c
 done
+
+# 版本号必须由构建注入（禁止再写死与发布 tag 不一致的常量）
+grep -q 'UDX710_TOOLS_VERSION' src/Makefile
+grep -q 'UDX710_TOOLS_VERSION' src/include/system/update.h
+grep -q 'VERSION:' .github/workflows/build.yml
 
 # SZ50 设备适配 API
 for route in /api/capabilities /api/led/status /api/led/control /api/wifi/status \

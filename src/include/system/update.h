@@ -12,8 +12,20 @@
 extern "C" {
 #endif
 
+/* 当前工具版本
+ * 构建时由 src/Makefile 注入 -DUDX710_TOOLS_VERSION=...（CI 取 git tag），
+ * 下面的兜底值只在未注入时使用，避免版本号与发布 tag 不一致。 */
+#ifndef UDX710_TOOLS_VERSION
+#define UDX710_TOOLS_VERSION "2.4.5"
+#endif
+
+/* 构建提交号（构建时注入，便于确认设备上跑的是哪一次提交） */
+#ifndef UDX710_TOOLS_COMMIT
+#define UDX710_TOOLS_COMMIT "unknown"
+#endif
+
 /* 当前固件版本 */
-#define FIRMWARE_VERSION "2.3.5"
+#define FIRMWARE_VERSION UDX710_TOOLS_VERSION
 
 /* 更新文件路径 */
 #define UPDATE_TMP_DIR "/tmp"
@@ -41,6 +53,12 @@ typedef struct {
  * @return 版本字符串
  */
 const char *update_get_version(void);
+
+/**
+ * @brief 获取构建提交号
+ * @return 提交号字符串（未注入时为 "unknown"）
+ */
+const char *update_get_build_commit(void);
 
 /**
  * @brief 获取嵌入的版本检查URL

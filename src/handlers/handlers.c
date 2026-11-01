@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file handlers.c
  * @brief HTTP API handlers implementation (Go: handlers)
  */
@@ -1508,6 +1508,19 @@ void handle_update_version(struct mg_connection *c,
   JsonBuilder *j = json_new();
   json_obj_open(j);
   json_add_str(j, "version", update_get_version());
+  json_obj_close(j);
+  HTTP_OK_FREE(c, json_finish(j));
+}
+
+/* GET /api/version - 当前部署版本（无需认证，前端用于显示"当前版本"） */
+void handle_version(struct mg_connection *c, struct mg_http_message *hm) {
+  HTTP_CHECK_GET(c, hm);
+
+  JsonBuilder *j = json_new();
+  json_obj_open(j);
+  json_add_str(j, "name", "UDX710-TOOLS");
+  json_add_str(j, "version", update_get_version());
+  json_add_str(j, "commit", update_get_build_commit());
   json_obj_close(j);
   HTTP_OK_FREE(c, json_finish(j));
 }
