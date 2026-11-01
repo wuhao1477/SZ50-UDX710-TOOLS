@@ -1,7 +1,7 @@
 {
-  "version": "2.4.5",
+  "version": "2.4.8",
   "url": "https://github.com/wuhao1477/SZ50-UDX710-TOOLS/releases/latest/download/udx710-tools-update.zip",
-  "changelog": "SZ50 专用版，仓库迁移至 https://github.com/wuhao1477/SZ50-UDX710-TOOLS",
+  "changelog": "仓库迁移至 SZ50-UDX710-TOOLS：开源地址与在线检查更新统一指向新仓库，保留覆盖安装与构建修复。",
   "size": 0,
   "required": false
 }
