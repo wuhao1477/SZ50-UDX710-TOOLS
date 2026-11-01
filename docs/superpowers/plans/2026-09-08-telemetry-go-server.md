@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go, net/http, encoding/json, compress/gzip, database/sql, pgx stdlib driver, pure-Go SQLite driver, embedded SQL migrations, and the Go testing package.
 
-**Spec:** ../UDX710-TOOLS/docs/superpowers/specs/2026-09-08-device-telemetry-upload-design.md
+**Spec:** ../SZ50-UDX710-TOOLS/docs/superpowers/specs/2026-09-08-device-telemetry-upload-design.md
 
 ## Global Constraints
 
@@ -140,5 +140,5 @@ git commit -S -m "test(server): 增加双数据库端到端验证"
 
 - [ ] **Step 1: Build a fixture with snapshot, traffic, service, dmesg, and at records plus secret/SMS-body fields used only to verify redaction.**
 - [ ] **Step 2: Start SQLite server, create a group, send gzip NDJSON with curl, run HEAD /v1/ingest, and assert stored/duplicate counts and absence of secret values in SQLite.**
-- [ ] **Step 3: Run go test ./... and go vet ./... in the Go repository; run make -C tests test, node tests/frontend_api_test.mjs, ./tests/check_routes.sh, cd web && pnpm run build, and cd ../src && make in UDX710-TOOLS.**
+- [ ] **Step 3: Run go test ./... and go vet ./... in the Go repository; run make -C tests test, node tests/frontend_api_test.mjs, ./tests/check_routes.sh, cd web && pnpm run build, and cd ../src && make in SZ50-UDX710-TOOLS.**
 - [ ] **Step 4: Review both git status --short --branch outputs and leave no binaries, local databases, plaintext Tokens, or untracked fixtures.**

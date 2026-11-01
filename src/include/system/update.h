@@ -33,8 +33,9 @@ extern "C" {
 #define UPDATE_EXTRACT_DIR "/tmp/update"
 #define UPDATE_INSTALL_SCRIPT "/tmp/update/install.sh"
 
-/* 版本检查URL（编译时嵌入） */
-#define UPDATE_CHECK_URL "https://gitee.com/C_Rabe/leo/raw/master/version.json"
+/* 版本检查URL（编译时嵌入，指向 SZ50-UDX710-TOOLS 仓库根目录的 version.json） */
+#define UPDATE_CHECK_URL \
+  "https://raw.githubusercontent.com/wuhao1477/SZ50-UDX710-TOOLS/main/version.json"
 
 /* 安装脚本签名配置文件 */
 #define UPDATE_CONFIG_FILE "/tmp/update/configuration.json"
