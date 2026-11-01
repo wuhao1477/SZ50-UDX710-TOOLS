@@ -13,6 +13,14 @@ grep -q 'UDX710_TOOLS_VERSION' src/Makefile
 grep -q 'UDX710_TOOLS_VERSION' src/include/system/update.h
 grep -q 'VERSION:' .github/workflows/build.yml
 
+# 禁止在 target_glibc_compat.c 里包装启动/线程符号：
+# 交叉编译出的二进制会在设备上启动即忙循环卡死（进不了 main）。
+if grep -nE '^[a-zA-Z_].*\b(pthread_create|pthread_join|pthread_detach|__libc_start_main)\s*\(' \
+    src/target_glibc_compat.c; then
+  echo "target_glibc_compat.c 不得定义 pthread_*/__libc_start_main 包装" >&2
+  exit 1
+fi
+
 # SZ50 设备适配 API
 for route in /api/capabilities /api/led/status /api/led/control /api/wifi/status \
   /api/wifi/config /api/wifi/clients /api/factory-reset; do
