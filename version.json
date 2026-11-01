@@ -1,7 +1,7 @@
 {
-  "version": "v2.4.9",
+  "version": "v2.4.10",
   "url": "https://github.com/wuhao1477/SZ50-UDX710-TOOLS/releases/latest/download/udx710-tools-update.zip",
-  "changelog": "修复系统更新：安装接口先应答再安装，页面不再报失败，安装后正常重启；版本比较忽略 v 前缀。",
+  "changelog": "修复侧边栏「当前版本」一直显示 ... 的问题；版本比较改为按数字段比较，正确处理 2.4.10 > 2.4.9。",
   "size": 0,
   "required": false
 }

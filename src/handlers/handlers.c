@@ -1650,14 +1650,24 @@ void handle_update_install(struct mg_connection *c,
   c->is_draining = 1;
 }
 
-/* 版本号比较：忽略前导 v/V。
- * tag 注入的版本串形如 "v2.4.9"，而 version.json 里的 version 可能带也可能不带前缀；
- * 直接 strcmp 会把 "2.4.9" 判成小于 "v2.4.8"（'2' < 'v'），永远检测不到更新。 */
+/* 版本号比较：忽略前导 v/V，并按点分数字段逐个比较。
+ * 直接 strcmp 有两个坑：'2' < 'v' 会把 "2.4.9" 判成小于 "v2.4.8"；
+ * 纯字典序还会把 "2.4.10" 判成小于 "2.4.9"。 */
 static int version_is_newer(const char *latest, const char *current) {
   if (!latest || !current) return 0;
   while (*latest == 'v' || *latest == 'V') latest++;
   while (*current == 'v' || *current == 'V') current++;
-  return strcmp(latest, current) > 0;
+
+  for (;;) {
+    long a = 0, b = 0;
+    while (*latest >= '0' && *latest <= '9') a = a * 10 + (*latest++ - '0');
+    while (*current >= '0' && *current <= '9') b = b * 10 + (*current++ - '0');
+    if (a != b) return a > b;
+    if (*latest != '.' && *current != '.') break; /* 两边都到头了 */
+    if (*latest == '.') latest++;
+    if (*current == '.') current++;
+  }
+  return 0;
 }
 
 /* GET /api/update/check - 检查远程版本 */

@@ -16,7 +16,7 @@ extern "C" {
  * 构建时由 src/Makefile 注入 -DUDX710_TOOLS_VERSION=...（CI 取 git tag），
  * 下面的兜底值只在未注入时使用，避免版本号与发布 tag 不一致。 */
 #ifndef UDX710_TOOLS_VERSION
-#define UDX710_TOOLS_VERSION "v2.4.9"
+#define UDX710_TOOLS_VERSION "v2.4.10"
 #endif
 
 /* 构建提交号（构建时注入，便于确认设备上跑的是哪一次提交） */

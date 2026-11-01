@@ -299,10 +299,12 @@ provide('toolsVersion', toolsVersion)
 
 async function fetchToolsVersion() {
   try {
-    const res = await getToolsVersion()
-    if (res && res.ok && res.data) {
-      toolsVersion.value = res.data.version || ''
-      toolsCommit.value = res.data.commit || ''
+    // getToolsVersion() 直接返回 /api/version 的 payload（不是 useApi() 的 {ok,data} 包装），
+    // 之前按 res.ok/res.data 判断导致条件永远为假，侧边栏一直显示 "..."
+    const data = await getToolsVersion()
+    if (data && data.version) {
+      toolsVersion.value = data.version
+      toolsCommit.value = data.commit || ''
     }
   } catch (error) {
     console.error('获取版本信息失败:', error)
