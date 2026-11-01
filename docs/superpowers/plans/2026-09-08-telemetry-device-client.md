@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
 
-**Goal:** Add an opt-in, best-effort telemetry uploader to UDX710-TOOLS that sends complete non-sensitive device snapshots, events, and logs to a configurable Go receiver.
+**Goal:** Add an opt-in, best-effort telemetry uploader to SZ50-UDX710-TOOLS that sends complete non-sensitive device snapshots, events, and logs to a configurable Go receiver.
 
 **Architecture:** Add a telemetry C module with a worker thread, direct calls to existing collectors, a shared redaction/record codec, and curl-based gzip NDJSON uploads. Expose authenticated device APIs and a small Vue settings component; do not add a local retry queue or a new device-side daemon.
 

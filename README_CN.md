@@ -31,7 +31,7 @@
 
 | 版本 | 下载链接 |
 |:---:|:---:|
-| **SZ50 专用版** | [📥 点击下载](https://github.com/wuhao1477/UDX710-TOOLS/releases/latest) |
+| **SZ50 专用版** | [📥 点击下载](https://github.com/wuhao1477/SZ50-UDX710-TOOLS/releases/latest) |
 
 ### SZ50 适配功能
 - 🔆 **LED灯控制** - 自定义LED指示灯状态
@@ -249,6 +249,8 @@ make
 上传默认关闭。在系统设置中配置完整接收 URL、分组 Token 和 10–3600 秒的快照周期后，设备会上传系统参数、运行状态、流量和日志。密码、认证凭据、Token 及短信正文不会上传。设备不保存断网队列，失败分片直接丢弃。
 
 系统更新页的本地文件模式使用云构建产物中的 `udx710-tools-update.zip`。该包包含 `install.sh`，会替换服务程序和前端文件，保留 `6677.db`、插件及其他数据。
+
+在线检查更新（`/api/update/check`）读取 [wuhao1477/SZ50-UDX710-TOOLS](https://github.com/wuhao1477/SZ50-UDX710-TOOLS) 仓库根目录的 `version.json`。发布新版本时更新其中的 `version`，并把 `url` 指向新的发布产物即可。
 
 ## 依赖库
 

@@ -644,7 +644,7 @@ onUnmounted(() => {
         <!-- GitHub链接 -->
         <div class="px-2 md:px-4 pb-2">
           <a 
-            href="https://github.com/LeoChen-CoreMind/UDX710-TOOLS" 
+            href="https://github.com/wuhao1477/SZ50-UDX710-TOOLS" 
             target="_blank"
             class="w-full group relative overflow-hidden rounded-xl transition-all duration-300 hover:bg-slate-100/80 dark:hover:bg-white/10 flex items-center p-2 md:p-3"
             :class="(sidebarCollapsed && !isMobile) ? 'justify-center' : 'space-x-3'"

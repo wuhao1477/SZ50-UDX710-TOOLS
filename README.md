@@ -33,7 +33,7 @@ The complete capability matrix is in [`tools/device-capabilities.md`](tools/devi
 
 | Version | Download |
 |:---:|:---:|
-| **SZ50 Dedicated** | [📥 Download](https://github.com/wuhao1477/UDX710-TOOLS/releases/latest) |
+| **SZ50 Dedicated** | [📥 Download](https://github.com/wuhao1477/SZ50-UDX710-TOOLS/releases/latest) |
 
 ### SZ50 Adaptation Features
 - 🔆 **LED Control** - Customize LED indicator status
@@ -251,6 +251,8 @@ The backend uses cross-compilation targeting aarch64-linux-gnu. Ensure your tool
 Uploading is disabled by default. Configure a complete receiver URL, group Token, and a 10–3600 second snapshot interval in System Settings. The device sends system parameters, runtime status, traffic, and logs; passwords, credentials, Tokens, and SMS bodies are excluded. No offline queue is kept on the device, so failed fragments are discarded.
 
 The System Update local-file mode uses `udx710-tools-update.zip` from the cloud build artifact. It contains `install.sh`, replaces the server and frontend files, and preserves `6677.db`, plugins, and other data.
+
+The online update check (`/api/update/check`) reads `version.json` from the repository root of [wuhao1477/SZ50-UDX710-TOOLS](https://github.com/wuhao1477/SZ50-UDX710-TOOLS). Bump `version` and point `url` at the new release asset when publishing a release.
 
 ## Dependencies
 
